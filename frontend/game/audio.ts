@@ -117,6 +117,35 @@ export class Sfx {
     this.noise(0.1, 520, 0.7, 0.35, 120)
   }
 
+  gloryKill() {
+    this.tone(60, 0.4, 0.75, 'sine', 28, 0.003)
+    this.tone(2400, 0.09, 0.18, 'square', 900, 0.001)
+    this.tone(1320, 0.24, 0.24, 'triangle', 660, 0.001)
+    if (!this.ctx || !this.noiseBuf) return
+    const t0 = this.ctx.currentTime
+    const src = this.ctx.createBufferSource()
+    src.buffer = this.noiseBuf
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.Q.value = 1.4
+    filter.frequency.setValueAtTime(320, t0)
+    filter.frequency.exponentialRampToValueAtTime(4200, t0 + 0.035)
+    filter.frequency.exponentialRampToValueAtTime(180, t0 + 0.3)
+    const gain = this.ctx.createGain()
+    gain.gain.setValueAtTime(0.001, t0)
+    gain.gain.linearRampToValueAtTime(0.65, t0 + 0.004)
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32)
+    src.connect(filter).connect(gain)
+    this.out(gain, 0)
+    src.onended = () => {
+      src.disconnect()
+      filter.disconnect()
+      gain.disconnect()
+    }
+    src.start(t0)
+    src.stop(t0 + 0.32)
+  }
+
   whoosh() {
     this.noise(0.4, 380, 0.8, 0.32, 2200)
     this.tone(180, 0.35, 0.12, 'sine', 520)

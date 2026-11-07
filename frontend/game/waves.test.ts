@@ -1,8 +1,11 @@
 import * as THREE from 'three'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WaveDirector, type CombatHost } from './waves'
 import type { Particles } from './effects'
 import type { Sfx } from './audio'
+
+beforeEach(() => vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null))
+afterEach(() => vi.restoreAllMocks())
 
 function makeHost() {
   const scene = new THREE.Scene()
@@ -18,11 +21,13 @@ function makeHost() {
     playerPos: () => player,
     now: () => 0,
     addShake: () => {},
+    hitstop: () => {},
     shockwave: () => {},
     damagePlayer: () => {},
     onKill: (type) => {
       kills.push(type)
     },
+    onGloryKill: () => {},
     onWaveStart: () => {},
     onWaveClear: () => {},
     sfxPan: () => 0,

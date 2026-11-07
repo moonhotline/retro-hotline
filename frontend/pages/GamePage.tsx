@@ -227,7 +227,7 @@ function Hud({ hud }: { hud: HudState }) {
           </div>
         )}
         <div className="font-tech text-[10px] uppercase tracking-widest text-white/35">
-          Q SWAP · F PUNCH
+          Q SWAP · F PUNCH · E GLORY KILL
         </div>
       </div>
     </div>
@@ -268,6 +268,13 @@ function ControlsGrid() {
         <span className="flex gap-1">
           <Kbd>F</Kbd>
           <Kbd>RMB</Kbd>
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span>GLORY KILL</span>
+        <span className="flex gap-1">
+          <Kbd>E</Kbd>
+          <Kbd>F / RMB</Kbd>
         </span>
       </div>
       <div className="flex items-center justify-between gap-4">

@@ -16,6 +16,7 @@ import {
   type Shockwave,
 } from './effects'
 import { WaveDirector, type CombatHost, type Enemy } from './waves'
+import { GLORY_KILL_BANNER, GloryKillSystem } from './combat/gloryKill'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -49,6 +50,7 @@ interface ActivePickup {
   born: number
   baseY: number
   cacheIndex: number
+  healAmount: number
 }
 
 interface TracerPopup extends Popup {
@@ -78,6 +80,7 @@ export class GameEngine implements CombatHost {
   private music = new SynthMusic()
   private gunRig: ReturnType<typeof buildGun>
   private director: WaveDirector
+  private gloryKills: GloryKillSystem
   private raycaster = new THREE.Raycaster()
   private tmpA = new THREE.Vector3()
   private tmpB = new THREE.Vector3()
@@ -142,6 +145,8 @@ export class GameEngine implements CombatHost {
   // Feel
   private shakeAmt = 0
   private timescale = 1
+  private hitstopScale = 1
+  private hitstopT = 0
 
   // HUD
   private banner = ''
@@ -186,6 +191,7 @@ export class GameEngine implements CombatHost {
     this.particles = new Particles(this.scene)
     this.gunRig = buildGun(this.camera)
     this.director = new WaveDirector(this)
+    this.gloryKills = new GloryKillSystem(this.director, this)
 
     window.addEventListener('resize', this.onResize)
     document.addEventListener('pointerlockchange', this.onLockChange)
@@ -238,6 +244,11 @@ export class GameEngine implements CombatHost {
       reloading: this.reloading,
       slideT: this.slideT,
       punchCd: this.punchCd,
+      staggered: this.director.enemies.filter((enemy) => enemy.staggerTimer > 0).length,
+      gloryDashing: this.gloryKills.isDashing,
+      hitstopT: this.hitstopT,
+      fov: this.camera.fov,
+      overchargeT: this.overchargeT,
       pos: { x: this.pos.x, y: this.pos.y, z: this.pos.z },
       yaw: this.yaw,
       music: this.music.debugState(),
@@ -345,6 +356,7 @@ export class GameEngine implements CombatHost {
     window.removeEventListener('keyup', this.onKeyUp)
     this.container.removeEventListener('click', this.onContainerClick)
     this.music.dispose()
+    this.gloryKills.reset()
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh & { material?: THREE.Material | THREE.Material[] }
       if (mesh.geometry && !(obj instanceof THREE.Sprite)) mesh.geometry.dispose()
@@ -373,6 +385,12 @@ export class GameEngine implements CombatHost {
 
   addShake(amount: number) {
     this.shakeAmt = Math.min(1.3, this.shakeAmt + amount)
+  }
+
+  hitstop(scale: number, duration: number) {
+    const clamped = THREE.MathUtils.clamp(scale, 0, 1)
+    this.hitstopScale = this.hitstopT > 0 ? Math.min(this.hitstopScale, clamped) : clamped
+    this.hitstopT = Math.max(this.hitstopT, duration)
   }
 
   shockwave(position: THREE.Vector3, color: number, scale: number) {
@@ -444,6 +462,16 @@ export class GameEngine implements CombatHost {
     this.pushPopup(`+${pts}`, mult >= 2 ? 'crit' : 'score', position)
 
     if (Math.random() < PICKUP_CHANCE) this.spawnPickup(position)
+  }
+
+  onGloryKill(position: THREE.Vector3) {
+    this.spawnPickup(position, -1, 'heal', 35)
+    this.spawnPickup(position, -1, 'overcharge')
+    this.score += 350
+    this.pushPopup('+350 GLORY KILL', 'crit', position)
+    this.setBanner(GLORY_KILL_BANNER)
+    this.hitMarkerId++
+    this.hitMarkerCrit = true
   }
 
   onWaveStart(_wave: number) {
@@ -531,6 +559,7 @@ export class GameEngine implements CombatHost {
     this.keys.add(e.code)
     if (this.status !== 'playing') return
     if (e.code === 'KeyQ') this.switchWeapon()
+    if (e.code === 'KeyE' && !e.repeat) this.tryGloryKill()
     if (e.code === 'KeyF') this.tryPunch()
     if (e.code === 'KeyC' || e.code === 'ControlLeft') this.trySlide()
     if (e.code === 'KeyR') this.tryReload()
@@ -563,8 +592,21 @@ export class GameEngine implements CombatHost {
     this.sfx.reload()
   }
 
+  private tryGloryKill(): boolean {
+    if (this.punchCd > 0 || this.gloryKills.isDashing) return false
+    // Input may arrive between frames, before the latest mouse aim is rendered.
+    this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
+    if (!this.gloryKills.tryGloryKill(this.pos, this.camera, this.director.enemies, this)) return false
+    this.punchCd = PUNCH_CD
+    this.punchAnim = 0
+    this.slideT = 0
+    this.vy = 0
+    return true
+  }
+
   private tryPunch() {
     if (this.punchCd > 0) return
+    if (this.tryGloryKill()) return
     this.punchCd = PUNCH_CD
     this.punchAnim = 0.18
     this.addShake(0.25)
@@ -590,7 +632,7 @@ export class GameEngine implements CombatHost {
   }
 
   private trySlide() {
-    if (this.slideT > 0 || this.slideCd > 0 || !this.grounded) return
+    if (this.gloryKills.isDashing || this.slideT > 0 || this.slideCd > 0 || !this.grounded) return
     let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0)
     let iz = (this.keys.has('KeyS') ? 1 : 0) - (this.keys.has('KeyW') ? 1 : 0)
     if (ix === 0 && iz === 0) {
@@ -696,14 +738,15 @@ export class GameEngine implements CombatHost {
 
   // ---------- pickups ----------
 
-  private spawnPickup(at: THREE.Vector3, cacheIndex = -1, kind: 'heal' | 'gem' | 'overcharge' = 'gem') {
-    let actualKind = kind
-    if (cacheIndex === -1) {
+  private spawnPickup(at: THREE.Vector3, cacheIndex = -1, kind?: 'heal' | 'gem' | 'overcharge', healAmount = 30) {
+    let actualKind = kind ?? 'gem'
+    if (cacheIndex === -1 && kind === undefined) {
       if (this.health < 70 && Math.random() < 0.5) actualKind = 'heal'
       else if (Math.random() < 0.35) actualKind = 'overcharge'
       else actualKind = 'gem'
     }
     const parts = makePickup(cacheIndex >= 0 ? 'stash' : actualKind)
+    if (actualKind === 'heal' && healAmount > 30) parts.group.scale.setScalar(1.35)
     if (cacheIndex >= 0) {
       parts.group.position.set(
         THREE.MathUtils.clamp(at.x, -26, 26),
@@ -723,6 +766,7 @@ export class GameEngine implements CombatHost {
       born: this.clock.elapsedTime,
       baseY: parts.group.position.y,
       cacheIndex,
+      healAmount,
     })
   }
 
@@ -815,6 +859,7 @@ export class GameEngine implements CombatHost {
   }
 
   private resetRun() {
+    this.gloryKills.reset()
     this.director.reset()
     this.particles.clear()
     this.slideHits.clear()
@@ -853,6 +898,8 @@ export class GameEngine implements CombatHost {
     this.slideT = 0
     this.slideCd = 0
     this.timescale = 1
+    this.hitstopScale = 1
+    this.hitstopT = 0
     this.shakeAmt = 0
     this.recoil = 0
     this.gunKick = 0
@@ -884,12 +931,15 @@ export class GameEngine implements CombatHost {
 
   // ---------- per-frame ----------
 
-  private update(dtRaw: number) {
+  private update(dtRaw: number, elapsed = dtRaw) {
     const t = this.clock.elapsedTime
 
     // slow-mo recovery (raw time)
     this.timescale += (1 - this.timescale) * Math.min(1, dtRaw * 1.6)
-    const dt = dtRaw * this.timescale
+    // Movement stays capped after a slow frame; hitstop still expires in real time.
+    const stoppedTime = dtRaw * Math.min(1, this.hitstopT / Math.max(elapsed, Number.EPSILON))
+    const dt = stoppedTime * Math.min(this.timescale, this.hitstopScale) + (dtRaw - stoppedTime) * this.timescale
+    this.hitstopT = Math.max(0, this.hitstopT - elapsed)
 
     if (this.bannerTimer > 0) {
       this.bannerTimer -= dtRaw
@@ -910,8 +960,10 @@ export class GameEngine implements CombatHost {
     if (this.overchargeT > 0) this.overchargeT -= dtRaw
 
     // ---- movement ----
+    const dashing = this.gloryKills.isDashing
+    this.gloryKills.update(elapsed, t)
     const sprintKey = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
-    if (this.slideT > 0) {
+    if (!dashing && this.slideT > 0) {
       this.slideT -= dtRaw
       const k = Math.max(this.slideT / SLIDE_TIME, 0.2)
       this.pos.x += this.slideDir.x * SLIDE_SPEED * k * dt
@@ -931,7 +983,7 @@ export class GameEngine implements CombatHost {
           this.sfx.hit()
         }
       }
-    } else {
+    } else if (!dashing) {
       let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0)
       let iz = (this.keys.has('KeyS') ? 1 : 0) - (this.keys.has('KeyW') ? 1 : 0)
       const moving = ix !== 0 || iz !== 0
@@ -955,13 +1007,13 @@ export class GameEngine implements CombatHost {
     resolveWalls(this.env.walls, this.pos, 0.55, this.pos.y)
 
     // Jump / gravity with heightmap ground
-    if (this.keys.has('Space') && this.grounded) {
+    if (!dashing && this.keys.has('Space') && this.grounded) {
       if (this.slideT > 0) this.slideT = 0
       this.vy = 8
       this.grounded = false
     }
-    this.vy -= 24 * dt
-    let y = this.pos.y + this.vy * dt
+    if (!dashing) this.vy -= 24 * dt
+    let y = this.pos.y + (dashing ? 0 : this.vy * dt)
     const gy = this.groundAt(this.pos.x, this.pos.z, Math.max(y, this.pos.y))
     const groundEye = gy + EYE_OFFSET
     if (y <= groundEye) {
@@ -1003,7 +1055,7 @@ export class GameEngine implements CombatHost {
     const bob = this.grounded && this.slideT <= 0 ? Math.sin(this.bobT) * 0.06 : 0
     const slideK = this.slideT > 0 ? Math.sin((1 - this.slideT / SLIDE_TIME) * Math.PI) : 0
     const slideDip = slideK * 0.9
-    const targetFov = (sprintKey ? 82 : 75) + slideK * 8
+    const targetFov = Math.max((sprintKey ? 82 : 75) + slideK * 8, this.gloryKills.fovFloor)
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dtRaw * 8)
     this.camera.updateProjectionMatrix()
 
@@ -1064,7 +1116,7 @@ export class GameEngine implements CombatHost {
     // Firing
     this.fireCd -= dt
     const wantFire = w.auto ? this.firing : this.triggerQueued
-    if (!this.reloading && wantFire) {
+    if (!dashing && !this.reloading && wantFire) {
       if (this.ammo[this.weapon] > 0) {
         if (this.fireCd <= 0) {
           this.fire()
@@ -1095,11 +1147,11 @@ export class GameEngine implements CombatHost {
       }
       if (d < 1.7) {
         if (p.parts.kind === 'heal') {
-          this.health = Math.min(100, this.health + 30)
-          this.pushPopup('+30 HP', 'heal', g.position)
+          this.health = Math.min(100, this.health + p.healAmount)
+          this.pushPopup(`+${p.healAmount} HP`, 'heal', g.position)
         } else if (p.parts.kind === 'overcharge') {
           this.overchargeT = OVERCHARGE_TIME
-          this.setBanner('OVERDRIVE ACTIVE')
+          if (this.banner !== GLORY_KILL_BANNER) this.setBanner('OVERDRIVE ACTIVE')
           this.pushPopup('OVERDRIVE', 'gem', g.position)
         } else if (p.parts.kind === 'stash') {
           this.score += STASH_VALUE
@@ -1196,7 +1248,7 @@ export class GameEngine implements CombatHost {
     this.gunRig.rifle.visible = showGun && this.weapon === 'rifle'
     this.gunRig.deagle.visible = showGun && this.weapon === 'deagle'
     if (this.status === 'playing') {
-      this.update(dt)
+      this.update(dt, rawDelta)
     } else if (this.status === 'menu') {
       this.updateCinematic(t)
     }

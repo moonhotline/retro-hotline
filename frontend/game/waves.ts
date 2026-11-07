@@ -20,6 +20,7 @@ export interface Enemy {
   radius: number
   phase: number
   flash: number
+  staggerTimer: number
   fireT: number
   burst: number
   burstT: number
@@ -42,9 +43,11 @@ export interface CombatHost {
   playerPos(): THREE.Vector3
   now(): number
   addShake(amount: number): void
+  hitstop(scale: number, duration: number): void
   shockwave(pos: THREE.Vector3, color: number, scale: number): void
   damagePlayer(n: number): void
   onKill(type: DroneType, pos: THREE.Vector3, byPlayer: boolean): void
+  onGloryKill(pos: THREE.Vector3): void
   onWaveStart(wave: number): void
   onWaveClear(): void
   sfxPan(pos: THREE.Vector3): number
@@ -113,6 +116,7 @@ export class WaveDirector {
 
   /** ignoreShield bypasses the Enforcer's front plating (deagle / melee). */
   damageEnemy(enemy: Enemy, dmg: number, ignoreShield = false): boolean {
+    if (!this.enemies.includes(enemy)) return false
     if (!ignoreShield && (enemy.type === 'enforcer' || enemy.type === 'boss')) {
       dmg *= 0.35 // pulse rifle pings off armor
     }
@@ -121,6 +125,15 @@ export class WaveDirector {
     if (enemy.hp <= 0) {
       this.explodeEnemy(enemy, true)
       return true
+    }
+    const stats = DRONE_STATS[enemy.type]
+    if (enemy.hp <= Math.max(1.2, stats.hp * 0.28) && enemy.staggerTimer <= 0) {
+      enemy.staggerTimer = 3.0
+      // Interrupt queued bursts and laser charges; recovery starts a fresh attack.
+      enemy.burst = 0
+      enemy.aimT = 0
+      enemy.fireT = Math.max(enemy.fireT, 0.6)
+      if (enemy.laser) (enemy.laser.material as THREE.LineBasicMaterial).opacity = 0
     }
     return false
   }
@@ -204,6 +217,20 @@ export class WaveDirector {
     e.parts.core.scale.set(e.radius * 2.2 * pop, e.radius * 2.2 * pop, 1)
     const outerMat = e.parts.outer.material as THREE.LineBasicMaterial
     outerMat.opacity = 0.75 + e.flash * 2
+
+    e.staggerTimer = Math.max(0, e.staggerTimer - dt)
+    if (e.staggerTimer > 0) {
+      const color = Math.sin(t * 18) >= 0 ? 0xffd319 : 0x00f0ff
+      outerMat.color.setHex(color)
+      e.parts.core.material.color.setHex(color)
+      g.position.addScaledVector(dir, e.speed * 0.15 * dt)
+      resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y)
+      g.lookAt(pp)
+      // Staggered drones cannot shoot or detonate on contact with the player.
+      return
+    }
+    outerMat.color.setHex(stats.color)
+    e.parts.core.material.color.setHex(stats.coreColor)
 
     const move = (v: THREE.Vector3, speed: number) => {
       g.position.addScaledVector(v, speed * dt)
@@ -409,6 +436,7 @@ export class WaveDirector {
       radius: st.radius,
       phase: Math.random() * Math.PI * 2,
       flash: 0,
+      staggerTimer: 0,
       fireT: type === 'marksman' ? 0 : 1.2 + Math.random(),
       burst: 0,
       burstT: 0,
@@ -432,10 +460,11 @@ export class WaveDirector {
     if (type === 'boss') this.host.sfx.roar(this.host.sfxPan(pos))
   }
 
-  private explodeEnemy(enemy: Enemy, byPlayer: boolean) {
+  explodeEnemy(enemy: Enemy, byPlayer: boolean) {
     const i = this.enemies.indexOf(enemy)
     if (i < 0) return
     this.enemies.splice(i, 1)
+    enemy.staggerTimer = 0
     const pos = enemy.parts.group.position.clone()
     this.host.scene.remove(enemy.parts.group)
     if (enemy.laser) {
