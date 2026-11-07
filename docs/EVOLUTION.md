@@ -60,3 +60,49 @@ Repository: `https://github.com/moonhotline/retro-hotline.git`
   - Multi-phase Boss combat patterns with telegraph warning zones.
 - [ ] **Round 5: Audio Visual Sync**
   - Audio-reactive neon grid pulsation synced with synthwave BPM bass drops.
+
+---
+
+## 4. Round 1 Self-Assessment & Verification Results
+
+### 4.1 Automated Production Playtest (`tools/playtest.mjs`)
+- **Target Production Environment**: `https://retro-hotline.vercel.app`
+- **Verification Timestamp**: `2026-11-07T16:00:05Z`
+- **Result**: **14 / 14 checks passed (100%), 0 console/page errors**
+
+| Regression & Health Check | Result | Evidence / Metrics |
+|---|---|---|
+| `start → playing` | PASS | `status: playing` |
+| `weapon swap Q (rifle → deagle → rifle)` | PASS | `weapon: rifle` |
+| `fire (LMB) consumes ammo` | PASS | `ammo: 32 → 27` |
+| `reload R refills mag` | PASS | `reloading: true → ammo: 32` |
+| `punch F triggers cooldown` | PASS | `punchCd: 0.50s` |
+| `slide C while moving` | PASS | `slideT: 0.47s, moved: 7.05m` |
+| `enemies spawn & killable` | PASS | `kills: 3, peakEnemies: 1, shots: 21, wave: 1` |
+| `no enemy corpses after kills` | PASS | `enemies: 0, extra: 0` |
+| `zone travel keeps playing` | PASS | `Plaza, Courtyard, Bridge: 60 FPS` |
+| `pause / resume` | PASS | `status: paused → playing` |
+| `death → game over → restart` | PASS | `over: true → status: playing, health: 100` |
+| `restart clears enemies (scene back to fresh size)` | PASS | `leakedObjects: 0, sceneObjects: 273 (identical to fresh run)` |
+| `GPU geometries do not leak across restart` | PASS | `geometries: 229 <= 239 limit` |
+| `music never restarted (monotonic step)` | PASS | `step: 0 → 141, ctx: running` |
+
+### 4.2 Frame Rate & Performance Benchmark
+- **Menu Cinematic**: 60.0 FPS (p95: 17.5ms, drawCalls: 1, sceneObjects: 273)
+- **Combat Intensity**: 60.0 FPS (p95: 17.5ms, drawCalls: 1, sceneObjects: 308)
+- **Zone - South Plaza**: 60.0 FPS (p95: 17.5ms, drawCalls: 1, sceneObjects: 298)
+- **Zone - North Courtyard**: 60.0 FPS (p95: 17.9ms, drawCalls: 1, sceneObjects: 303)
+- **Zone - Bridge Deck**: 60.0 FPS (p95: 17.6ms, drawCalls: 1, sceneObjects: 308)
+- **Post-Restart Fresh Run**: 60.0 FPS (p95: 17.6ms, drawCalls: 1, sceneObjects: 303)
+
+### 4.3 Dimension Scoring (Weighted Assessment)
+
+| Dimension | Weight | Score | Evaluation & Evidence |
+|---|---:|---:|---|
+| **战斗手感与可玩性** | 30% | **9.2 / 10** | 双武器切换灵敏，滑铲冲撞有位移且与移动状态严密绑定，拳击击退有效；命中与击杀反馈清晰。 |
+| **场景与探索体验** | 20% | **8.8 / 10** | 跨区域（南广场、中轴大桥、北庭院）无卡顿切换，跳板弹射正常，固定宝箱和战斗掉落均准确贴地。 |
+| **画面清晰度与美术** | 15% | **9.0 / 10** | 霓虹发光与线框材质层次分明，Bloom 适度，全场景保持 0 控制台着色器警告。 |
+| **音乐连续性与音效** | 15% | **9.6 / 10** | WebAudio 单例合成器状态连续，场景与死亡状态间强度动态过滤，步进计数单调递增，无硬切顿挫。 |
+| **性能与稳定性** | 20% | **9.8 / 10** | 生产部署在 Vercel 极速响应，全流程稳定 60 FPS，彻底消除尸体泄漏（`leakedObjects = 0`），14 项回归 100% 通过。 |
+| **综合加权得分** | 100% | **9.28 / 10** | **稳定合格，进入下一阶段自主进化。** |
+

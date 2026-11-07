@@ -79,6 +79,12 @@ export class WaveDirector {
     return this.queue.length + this.enemies.length
   }
 
+  clearEnemies() {
+    this.queue = []
+    this.intermission = 999
+    for (const e of [...this.enemies]) this.explodeEnemy(e, false)
+  }
+
   reset() {
     for (const e of this.enemies) {
       this.host.scene.remove(e.parts.group)

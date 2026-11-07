@@ -287,6 +287,7 @@ export class GameEngine implements CombatHost {
       damageAll: (n: number) => {
         for (const e of [...this.director.enemies]) this.director.damageEnemy(e, n, true)
       },
+      clearEnemies: () => this.director.clearEnemies(),
       skipIntermission: () => {
         this.director.intermission = Math.min(this.director.intermission, 0.01)
       },
@@ -303,12 +304,14 @@ export class GameEngine implements CombatHost {
     this.sfx.resume()
     this.music.start()
     this.started = true
+    this.setStatus('playing')
     this.resetRun()
     this.requestLock()
     this.emit(true)
   }
 
   resume() {
+    if (this.started) this.setStatus('playing')
     this.requestLock()
   }
 
@@ -316,6 +319,7 @@ export class GameEngine implements CombatHost {
     this.sfx.resume()
     this.music.start()
     this.started = true
+    this.setStatus('playing')
     this.resetRun()
     this.requestLock()
     this.emit(true)
@@ -502,7 +506,6 @@ export class GameEngine implements CombatHost {
 
   private onMouseDown = (e: MouseEvent) => {
     if (this.status !== 'playing') return
-    if (!this.isLocked() && !this.lockFailed) return
     if (e.button === 0) {
       this.firing = true
       this.triggerQueued = true

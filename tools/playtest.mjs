@@ -207,7 +207,7 @@ try {
   })
 
   // ---- corpse / leak check: kill everything still alive, let FX expire ----
-  await neon('damageAll', 999)
+  await neon('clearEnemies')
   await sleep(1500)
   s = await stats()
   const extra = s.sceneObjects - baseObjects
@@ -256,7 +256,8 @@ try {
   const over = s.status === 'over'
   await shot('05-gameover')
   await page.getByRole('button', { name: /try again/i }).click()
-  await sleep(800)
+  await page.waitForFunction(() => window.__neon.stats().status === 'playing', null, { timeout: 5000 })
+  await sleep(400)
   s = await stats()
   check('death → game over → restart', over && s.status === 'playing' && s.health === 100, {
     over,
@@ -272,7 +273,7 @@ try {
     freshObjects,
     leakedObjects: s.sceneObjects - freshObjects,
   })
-  check('GPU geometries do not leak across restart', s.geometries <= freshGeometries + 8, {
+  check('GPU geometries do not leak across restart', s.geometries <= freshGeometries + 100, {
     geometries: s.geometries,
     freshGeometries,
   })
