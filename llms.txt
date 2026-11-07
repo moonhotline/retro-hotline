@@ -1,0 +1,19 @@
+# Retro Hotline
+
+> Retro Hotline is a single-player neon 3D browser FPS with dual weapons, slide kicks, melee combat, stagger-based glory kills, wave survival and an original procedural WebAudio synthwave soundtrack.
+
+Official playable URL: https://retro.oodai.space/
+The game interface also uses NEON BAY and Bay Bridge Shooter. This is an independent project.
+Desktop keyboard and mouse are the documented inputs. Seeded modular districts and Roguelite build progression are development goals, not confirmed released features. Promotional artwork is concept art, not a gameplay screenshot.
+
+## Project information
+
+- [README](https://raw.githubusercontent.com/moonhotline/retro-hotline/main/README.md): English and Chinese project overview, play link, controls, FAQ and source-branch setup.
+- [Project facts](https://raw.githubusercontent.com/moonhotline/retro-hotline/main/docs/FACTS.md): Attributable capabilities, current limitations and source references.
+- [Playable game](https://retro.oodai.space/): Browser entry point.
+
+## Optional
+
+- [Source branch](https://github.com/moonhotline/retro-hotline/tree/feat/game-evolution): Current application implementation while PR #1 is open.
+- [Development PR](https://github.com/moonhotline/retro-hotline/pull/1): Integration status of the game source.
+- [Issue tracker](https://github.com/moonhotline/retro-hotline/issues): Bug reports and development discussion.

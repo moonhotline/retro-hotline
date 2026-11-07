@@ -371,6 +371,11 @@ export default function GamePage() {
               CLICK LOCKS YOUR MOUSE · ESC PAUSES
             </p>
             <p className="mt-1 text-center font-tech text-[10px] text-white/30">{MUSIC_CREDIT}</p>
+            <p className="mt-3 text-center font-tech text-xs">
+              <a href="/about.html" className="text-[#9ffcff] underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+                About Retro Hotline · Controls & FAQ
+              </a>
+            </p>
           </div>
         </div>
       )}
