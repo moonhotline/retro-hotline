@@ -52,6 +52,8 @@ export interface HudState {
   popups: Popup[]
   muted: boolean
   musicTrackName?: string
+  musicTrackBpm?: number
+  district?: string
   weapon: WeaponId
   overchargeFrac: number
   slideFrac: number

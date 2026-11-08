@@ -2,9 +2,9 @@ import * as THREE from 'three'
 import { edgeBox, ghostBox, makeGlowSprite } from './effects'
 
 /**
- * Multi-zone Miami map: the bridge, a neon plaza with an arcade hall,
- * a pool courtyard with a warehouse rooftop, jump pads, palms, cars and
- * hidden stash spots. Walk rects double as a simple heightmap for the
+ * Bay Area arena: bridge, neon arcade plaza, logistics courtyard and the
+ * Silicon Valley campus with a launch route to Sand Hill Quantum Vault.
+ * Walk rects double as a simple heightmap for the
  * player; wall boxes are used for both player/enemy collision and
  * bullet/line-of-sight blocking (cover).
  */
@@ -116,10 +116,15 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     { x0: -26, x1: 26, z0: -380, z1: -284, top: 0.6 }, // south plaza
     { x0: -26, x1: 26, z0: 284, z1: 380, top: 0.6 }, // north courtyard
     { x0: 8, x1: 24, z0: 300, z1: 360, top: 7 }, // warehouse roof
+    { x0: -40, x1: 40, z0: 380, z1: 680, top: 0.6 }, // Silicon Valley campus
+    { x0: -18, x1: 18, z0: 480, z1: 560, top: 9.5 }, // Sand Hill Quantum Vault
   ]
   const pad = (x: number, z: number, velocity: number): JumpPad =>
     Object.assign(new THREE.Vector3(x, 0.6, z), { boost: new THREE.Vector3(0, velocity, 0) })
   const pads: JumpPad[] = [pad(16, 292, 20), pad(0, -135, 23), pad(0, 135, 23), pad(0, -12, 20)]
+  const vaultPad = pad(0, 420, 30)
+  vaultPad.boost.z = 34
+  pads.push(vaultPad)
   const pulse: Array<{ mat: THREE.LineBasicMaterial; base: number; speed: number }> = []
 
   const addWall = (
@@ -335,6 +340,74 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   signGlow.position.set(16, 4.6, 299)
   scene.add(signGlow)
 
+  // ---- Silicon Valley / Palo Alto Data Monoliths ----
+  floorGrid(-40, 40, 380, 680, 0x00f0ff)
+  // Keep a broad central approach and side routes through the server clusters.
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 5; row++) {
+      const x = side * (row % 2 === 0 ? 31 : 28)
+      const z = 442 + row * 48
+      const height = 16 + (row % 3) * 7
+      const color = row % 2 === 0 ? 0x00f0ff : 0x39ff14
+      addWall(x, z, 8, 12, height, color)
+      const monolith = new THREE.Group()
+      monolith.name = 'palo-alto-data-monolith'
+      for (let y = 3; y < height; y += 4) {
+        const rack = edgeBox(8.1, 0.5, 12.1, color, 0.55)
+        rack.position.set(x, y, z)
+        monolith.add(rack)
+      }
+      scene.add(monolith)
+    }
+    // Campus edge barriers, with the south approach left open.
+    addWall(side * 40, 530, 0.4, 300, 1.4, 0x00f0ff)
+  }
+  addWall(0, 680, 80, 0.4, 1.4, 0x39ff14)
+
+  // Suspended vault: collision slab, traversable underside, open entry/exit.
+  const vaultDeck = ghostBox(36, 0.6, 80)
+  vaultDeck.name = 'sand-hill-quantum-vault-deck'
+  vaultDeck.position.set(0, 9.2, 520)
+  scene.add(vaultDeck)
+  collidables.push(vaultDeck)
+  walls.push({ x: 0, z: 520, hw: 18, hd: 40, h: 9.5, bottom: 8.9 })
+  const vaultFrame = edgeBox(36, 0.6, 80, 0x00f0ff)
+  vaultFrame.name = 'sand-hill-quantum-vault-frame'
+  vaultFrame.position.copy(vaultDeck.position)
+  scene.add(vaultFrame)
+  const vaultLines: number[] = []
+  for (let x = -18; x <= 18; x += 6) vaultLines.push(x, 9.52, 480, x, 9.52, 560)
+  for (let z = 480; z <= 560; z += 8) vaultLines.push(-18, 9.52, z, 18, 9.52, z)
+  for (const x of [-18, 18]) {
+    walls.push({ x, z: 520, hw: 0.15, hd: 40, h: 10.6, bottom: 9.5 })
+    vaultLines.push(x, 10.6, 480, x, 10.6, 560)
+    for (const z of [480, 520, 560]) {
+      addWall(x, z, 0.8, 0.8, 9.5, 0x00f0ff)
+      vaultLines.push(x, 9.5, z, x, 10.6, z)
+    }
+  }
+  scene.add(new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(vaultLines, 3)),
+    new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.45 })
+  ))
+  const core = edgeBox(5, 5, 5, 0x39ff14)
+  core.name = 'sand-hill-quantum-core'
+  core.position.set(0, 15, 535)
+  core.rotation.set(Math.PI / 4, Math.PI / 4, 0)
+  scene.add(core)
+  const coreGlow = makeGlowSprite(0x39ff14, 13, 0.4)
+  coreGlow.position.copy(core.position)
+  scene.add(coreGlow)
+  // Direction chevrons lead from the logistics hub to the launch pad.
+  const approachLines: number[] = []
+  for (let z = 390; z <= 414; z += 8) {
+    approachLines.push(-2, 0.65, z, 0, 0.65, z + 3, 0, 0.65, z + 3, 2, 0.65, z)
+  }
+  scene.add(new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(approachLines, 3)),
+    new THREE.LineBasicMaterial({ color: 0x39ff14 })
+  ))
+
   // ---- Jump pads: pulsing rings and vertical launch arrows ----
   for (const pad of pads) {
     const g = new THREE.Group()
@@ -374,7 +447,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   for (let i = 0; i < 12; i++) {
     const h = 14 + Math.random() * 40
     const b = edgeBox(10 + Math.random() * 10, h, 10, 0x9a2be2, 0.5)
-    b.position.set(-90 + Math.random() * 180, h / 2, 420 + Math.random() * 90)
+    b.position.set(-90 + Math.random() * 180, h / 2, 720 + Math.random() * 90)
     scene.add(b)
   }
 
@@ -402,7 +475,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     if (candidates.length > 0) {
       return candidates[Math.floor(Math.random() * candidates.length)] as THREE.Vector3
     }
-    const z = THREE.MathUtils.clamp(playerPos.z + (playerPos.z > 0 ? -45 : 45), -378, 378)
+    const z = THREE.MathUtils.clamp(playerPos.z + (playerPos.z > 0 ? -45 : 45), -378, 678)
     return clearSpawn(new THREE.Vector3(0, Math.max(4, playerPos.y + 2), z))
   }
 
@@ -411,6 +484,8 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     walkRects,
     pads,
     update(t: number) {
+      core.rotation.y = Math.PI / 4 + t * 0.35
+      core.rotation.z = Math.sin(t * 0.4) * 0.2
       for (const p of pulse) {
         p.mat.opacity = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * p.speed))
       }

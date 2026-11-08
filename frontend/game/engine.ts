@@ -105,6 +105,7 @@ export class GameEngine implements CombatHost {
   private yaw = 0
   private pitch = 0
   private vy = 0
+  private launchVelocity = new THREE.Vector3()
   private grounded = true
   private invulnerable = false
   private bobT = 0
@@ -216,6 +217,7 @@ export class GameEngine implements CombatHost {
     document.addEventListener('mouseup', this.onMouseUp)
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
+    window.addEventListener('blur', this.clearInput)
     this.container.addEventListener('click', this.onContainerClick)
 
     this.animate()
@@ -233,6 +235,7 @@ export class GameEngine implements CombatHost {
     const info = this.renderer.info
     return {
       status: this.status,
+      district: this.currentDistrict(),
       fps: avg > 0 ? 1000 / avg : 0,
       frameMsAvg: avg,
       frameMsP95: p95,
@@ -375,6 +378,19 @@ export class GameEngine implements CombatHost {
     this.emit(true)
   }
 
+  /** Resume the continuous synth from a menu gesture without starting a run. */
+  previewAudio() {
+    this.sfx.resume()
+    this.music.start()
+  }
+
+  nextTrack() {
+    const next = this.music.nextTrack()
+    saveProfile({ musicTrackIndex: this.music.getCurrentTrackIndex() })
+    this.setBanner(`TRACK // ${next.name} [${next.bpm} BPM]`)
+    this.emit(true)
+  }
+
   dispose() {
     this.finishRun()
     cancelAnimationFrame(this.rafId)
@@ -387,6 +403,7 @@ export class GameEngine implements CombatHost {
     document.removeEventListener('mouseup', this.onMouseUp)
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    window.removeEventListener('blur', this.clearInput)
     this.container.removeEventListener('click', this.onContainerClick)
     this.music.dispose()
     this.abilities.reset()
@@ -600,8 +617,7 @@ export class GameEngine implements CombatHost {
     if (this.isLocked()) {
       if (this.started && this.status === 'paused') this.setStatus('playing')
     } else {
-      this.firing = false
-      this.keys.clear()
+      this.clearInput()
       if (this.status === 'playing' && !this.lockFailed) this.setStatus('paused')
     }
   }
@@ -623,6 +639,7 @@ export class GameEngine implements CombatHost {
 
   private onMouseDown = (e: MouseEvent) => {
     if (this.status !== 'playing') return
+    if (e.target instanceof Element && e.target.closest('button, dialog, input, select, textarea')) return
     if (e.button === 0) {
       this.firing = true
       this.triggerQueued = true
@@ -635,6 +652,12 @@ export class GameEngine implements CombatHost {
     if (e.button === 0) this.firing = false
   }
 
+  private clearInput = () => {
+    this.firing = false
+    this.triggerQueued = false
+    this.keys.clear()
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.draftHacks.length > 0) return
     if (e.isComposing || (e.target instanceof Element &&
@@ -642,10 +665,7 @@ export class GameEngine implements CombatHost {
     if (e.code === 'KeyN') {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
       e.preventDefault()
-      const next = this.music.nextTrack()
-      saveProfile({ musicTrackIndex: this.music.getCurrentTrackIndex() })
-      this.setBanner(`TRACK // ${next.name} [${next.bpm} BPM]`)
-      this.emit(true)
+      this.nextTrack()
       return
     }
     if (e.code === 'Space') e.preventDefault()
@@ -669,7 +689,7 @@ export class GameEngine implements CombatHost {
         if (this.abilities.tryPhaseDash(direction)) this.slideT = 0
       }
       if (e.code === 'KeyV') this.abilities.tryPulseParry()
-      if ((e.code === 'KeyG' || e.code === 'KeyC') && !this.gloryKills.isDashing) {
+      if (e.code === 'KeyG' && !this.gloryKills.isDashing) {
         if (this.abilities.tryKineticSlam()) this.slideT = 0
       }
     }
@@ -770,10 +790,13 @@ export class GameEngine implements CombatHost {
   private fire() {
     const w = WEAPONS[this.weapon]
     this.ammo[this.weapon] -= this.hackManager.ammoCost(this.weapon)
-    this.fireCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1)
+    const baseCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1)
+    // Carry the partial frame forward, so held fire keeps its authored cadence.
+    this.fireCd = Math.min(baseCd, this.fireCd < 0 ? this.fireCd + baseCd : baseCd)
     this.gunKick = w.kick
-    this.recoil += w.recoil
-    this.muzzleTimer = 0.06
+    this.recoil = Math.min(0.045, this.recoil + w.recoil)
+    this.muzzleTimer = 0.045
+    this.gunRig.flash.visible = true
     this.addShake(w.shake)
     const flashScale = w.flash * (this.overchargeT > 0 ? 1.4 : 1) * (0.8 + Math.random() * 0.4)
     this.gunRig.flash.scale.set(flashScale, flashScale, 1)
@@ -998,6 +1021,8 @@ export class GameEngine implements CombatHost {
       popups: alivePopups.map((p) => ({ id: p.id, text: p.text, kind: p.kind, x: p.x, y: p.y })),
       muted: this.muted,
       musicTrackName: this.music.getCurrentTrack().name,
+      musicTrackBpm: this.music.getCurrentTrack().bpm,
+      district: this.currentDistrict(),
       weapon: this.weapon,
       overchargeFrac: Math.max(0, Math.min(1, this.overchargeT / OVERCHARGE_TIME)),
       slideFrac: this.slideCd <= 0 ? 1 : 1 - this.slideCd / SLIDE_CD,
@@ -1011,6 +1036,14 @@ export class GameEngine implements CombatHost {
       this.lastEmit = key
       this.onHud(snap)
     }
+  }
+
+  private currentDistrict(): string {
+    const z = this.camera.position.z
+    if (z < -284) return 'SOUTH PLAZA // NEON ARCADE'
+    if (z <= 284) return 'BAY BRIDGE // TRANSIT SPAN'
+    if (z <= 400) return 'NORTH GATE // LOGISTICS HUB'
+    return 'SILICON VALLEY // QUANTUM CAMPUS'
   }
 
   private currentMult(): number {
@@ -1064,6 +1097,8 @@ export class GameEngine implements CombatHost {
     this.firing = false
     this.triggerQueued = false
     this.overchargeT = 0
+    this.fireCd = 0
+    this.muzzleTimer = 0
     this.punchCd = 0
     this.punchAnim = 0
     this.slideT = 0
@@ -1079,6 +1114,7 @@ export class GameEngine implements CombatHost {
     this.yaw = 0
     this.pitch = 0
     this.vy = 0
+    this.launchVelocity.set(0, 0, 0)
     this.grounded = true
     this.keys.clear()
     this.pos.set(0, 2.4, 180)
@@ -1179,9 +1215,12 @@ export class GameEngine implements CombatHost {
       }
     }
     if (this.draftHacks.length > 0) return
+    // Directional campus pads carry the player to the vault. Air steering still works.
+    if (dashing || this.abilities.isSlamming) this.launchVelocity.set(0, 0, 0)
+    if (!this.grounded && !dashing) this.pos.addScaledVector(this.launchVelocity, dt)
     // Soft world bounds
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -60, 60)
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 400)
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 700)
 
     // Wall collision (only against walls taller than the player)
     resolveWalls(this.env.walls, this.pos, 0.55, this.pos.y - EYE_OFFSET)
@@ -1212,6 +1251,7 @@ export class GameEngine implements CombatHost {
       y = groundEye
       this.vy = 0
       this.grounded = true
+      this.launchVelocity.set(0, 0, 0)
       this.lastSafe.copy(this.pos)
       this.lastSafe.y = groundEye
     } else {
@@ -1228,6 +1268,7 @@ export class GameEngine implements CombatHost {
         const dz = this.pos.z - pad.z
         if (dx * dx + dz * dz < 1.8 * 1.8 && Math.abs(this.pos.y - EYE_OFFSET - pad.y) < 0.2) {
           this.vy = pad.boost.y
+          this.launchVelocity.set(pad.boost.x, 0, pad.boost.z)
           this.grounded = false
           this.sfx.whoosh()
           this.particles.burst(pad, SPARK_COLOR, 14, 5, 0.6)
@@ -1242,6 +1283,7 @@ export class GameEngine implements CombatHost {
       this.vy = 0
       this.grounded = true
       this.abilities.cancelMotion()
+      this.launchVelocity.set(0, 0, 0)
       this.damagePlayer(8)
       this.setBanner('WATCH YOUR STEP')
       this.addShake(0.6)
@@ -1255,7 +1297,7 @@ export class GameEngine implements CombatHost {
     this.camera.updateProjectionMatrix()
 
     // Camera transform + shake + punch lunge
-    this.recoil *= Math.exp(-dtRaw * 5)
+    this.recoil = Math.max(0, this.recoil - dt * 1.8)
     this.shakeAmt *= Math.exp(-dtRaw * 6)
     const sh = this.shakeAmt
     let cx = this.pos.x + (Math.random() - 0.5) * sh * 0.35
@@ -1274,7 +1316,7 @@ export class GameEngine implements CombatHost {
     // ---- weapon pose ----
     const w = WEAPONS[this.weapon]
     const gun = this.weapon === 'rifle' ? this.gunRig.rifle : this.gunRig.deagle
-    this.gunKick = Math.max(0, this.gunKick - dt * 1.2)
+    this.gunKick = Math.max(0, this.gunKick - dt * 4.5)
     let gy2 = -0.42
     let rotX = 0
     let rotZ = 0
@@ -1309,8 +1351,10 @@ export class GameEngine implements CombatHost {
     }
 
     // Firing
-    this.fireCd -= dt
-    const wantFire = w.auto ? this.firing : this.triggerQueued
+    const wantFire = w.auto ? this.firing || this.triggerQueued : this.triggerQueued
+    // Idle/reload time is not shot debt. Only active fire can carry an overshoot.
+    this.fireCd = !dashing && !this.reloading && wantFire
+      ? this.fireCd - dt : Math.max(0, this.fireCd - dt)
     if (!dashing && !this.reloading && wantFire) {
       if (this.ammo[this.weapon] > 0) {
         if (this.fireCd <= 0) {

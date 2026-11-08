@@ -1,0 +1,393 @@
+{
+  "schemaVersion": "uizze.visual-evidence.v1",
+  "scope": "Retro Hotline Silicon Valley console redesign and district HUD; compare with the user brief and saved existing-system baselines. No generated target was available.",
+  "platform": "web",
+  "comparison": "existing-system",
+  "sources": [
+    {
+      "path": "../../../frontend/components/ConsoleMenu.tsx",
+      "sha256": "685e56b56c13e34d1c38a0d9d91743085a191766a17a022f57da7e4e31abc50a"
+    },
+    {
+      "path": "../../../frontend/components/ConsoleMenu.css",
+      "sha256": "2a282f797eac1121f1bfa18caae89785254adbee4205414454c293147385e64a"
+    },
+    {
+      "path": "../../../frontend/pages/GamePage.tsx",
+      "sha256": "7784783ddd911110d86fde8ba21f1ce95a47d949e392316f61a5c879ec20820c"
+    },
+    {
+      "path": "../../../frontend/game.css",
+      "sha256": "a8d80d735154b2523128f798e71e319ed9c98743582884c9955d18a235f47b74"
+    },
+    {
+      "path": "../../../frontend/index.html",
+      "sha256": "a54fd562ab227d63bc27571f8f7ed817ae5fbe0312a5c48faaa87f178a567218"
+    },
+    {
+      "path": "../../../frontend/index.css",
+      "sha256": "cc1a7ad0d019ddb1d32d0ecb588ba0ac26ce41d8625dd6c366348b25f83a28ec"
+    },
+    {
+      "path": "../../../frontend/theme.css",
+      "sha256": "19a9755fdb2e5e61e04f8ef964ce067b0221650fe3fa717e8b0e56461397dc8d"
+    },
+    {
+      "path": "../../../frontend/game/engine.ts",
+      "sha256": "bcf98ce2484ebaca1c47808fd52a172f861db51ddd438facc1fbd55a17c95d5f"
+    },
+    {
+      "path": "../../../frontend/game/map.ts",
+      "sha256": "02aa3816a2b56cd395113328fa0c168330212fb38455b699dfa333b0936c58b2"
+    },
+    {
+      "path": "../../../frontend/game/environment.ts",
+      "sha256": "13d418484fda6f859ec148142973b93e4a7daa17a1d1beb2634ecd2314ba6994"
+    },
+    {
+      "path": "../../../frontend/game/types.ts",
+      "sha256": "b3f21b844cc872f0e1cf33b1b6c158936bde280be6b7c5b767e5a4389c37bd1a"
+    },
+    {
+      "path": "../../../frontend/game/music.ts",
+      "sha256": "679b9739912d944b5cfec519e4357e132fefc3fcdc3b1c3a173de6faacd6876c"
+    },
+    {
+      "path": "../../../frontend/game/effects.ts",
+      "sha256": "fd104f5982d066283105f0aa8c2ae3fe52c1697ad1a3038754b8415eafc48017"
+    },
+    {
+      "path": "../../../frontend/game/audio.ts",
+      "sha256": "52c889090eb864563d2ded6e5bfb964d107768ead623cecd7b2ef1337bfb338b"
+    },
+    {
+      "path": "../../../frontend/game/combat/storage.ts",
+      "sha256": "bcb812956858c475a48806a0365ef237b1901779cdd3fb43461eb5cd65260ce1"
+    },
+    {
+      "path": "../../../frontend/tailwind.config.js",
+      "sha256": "f169c3323843656e74ca43ff9bc0cfd72ad4b93a7f40a038119bb2b3ca07cbc4"
+    },
+    {
+      "path": "../../../frontend/components/HackTerminal.css",
+      "sha256": "88354050102cb975c46ea75b77074a8f1a0a5078dd4daf9544ece6e07f356e30"
+    }
+  ],
+  "requiredChecks": [
+    {
+      "id": "standby-desktop",
+      "kind": "visual"
+    },
+    {
+      "id": "hub-desktop",
+      "kind": "visual"
+    },
+    {
+      "id": "controls-desktop",
+      "kind": "interaction"
+    },
+    {
+      "id": "media-desktop",
+      "kind": "interaction"
+    },
+    {
+      "id": "standby-mobile",
+      "kind": "visual"
+    },
+    {
+      "id": "hub-mobile",
+      "kind": "visual"
+    },
+    {
+      "id": "controls-mobile",
+      "kind": "interaction"
+    },
+    {
+      "id": "media-mobile",
+      "kind": "visual"
+    },
+    {
+      "id": "reduced-motion",
+      "kind": "interaction"
+    },
+    {
+      "id": "controller-fixture",
+      "kind": "interaction"
+    },
+    {
+      "id": "campus-hud",
+      "kind": "interaction"
+    }
+  ],
+  "checks": [
+    {
+      "id": "standby-desktop",
+      "status": "pass",
+      "state": "Standby; controller disconnected",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1440,
+        "height": 900
+      },
+      "observed": "Requested obsidian console, grand Retro Hotline wordmark, clear initialize button, real synth title/BPM and explicit unavailable battery.",
+      "artifacts": [
+        {
+          "path": "standby-desktop.png",
+          "sha256": "57b3f5b45f1824b2f69317023e9fbce05ab2f1568a9d96e593216a7a93172ae7",
+          "kind": "image"
+        }
+      ]
+    },
+    {
+      "id": "hub-desktop",
+      "status": "pass",
+      "state": "Games hub at 1440 \u00d7 900",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1440,
+        "height": 900
+      },
+      "observed": "Launch/controls, four profile records, campus preview, three compact activity cards and track footer fit without scrolling.",
+      "artifacts": [
+        {
+          "path": "hub-desktop.png",
+          "sha256": "3671c6da5d8fa961fa013146eb5e1f8128871249529f2c0c56a26698d96bc39d",
+          "kind": "image"
+        }
+      ]
+    },
+    {
+      "id": "controls-desktop",
+      "status": "pass",
+      "state": "Native controls dialog",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1440,
+        "height": 900
+      },
+      "observed": "Four categories separate C slide from V parry and G slam. Escape closes to hub and restores the trigger; Tab remains in dialog.",
+      "artifacts": [
+        {
+          "path": "controls-desktop.png",
+          "sha256": "748884265b0541894727d5682453c9067eba2228ebc0d17ab664499697c5afca",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Initialize with Enter",
+        "Click Controls & Tactics",
+        "Press Tab and check focused element is in dialog",
+        "Press Escape and check focus returns to controls button"
+      ]
+    },
+    {
+      "id": "media-desktop",
+      "status": "pass",
+      "state": "Media library",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1440,
+        "height": 900
+      },
+      "observed": "Three synth tracks show their BPM; keyboard N and the footer button cycle the same running engine without restarting music.",
+      "artifacts": [
+        {
+          "path": "media-desktop.png",
+          "sha256": "d0dbce1dfd2e12abce68665c22a6ff7ab88d9ac06f784f281b76b9ef5c01aa31",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Open Media",
+        "Press N and verify name/BPM in live badge",
+        "Click track button",
+        "Press N to restore original track"
+      ]
+    },
+    {
+      "id": "standby-mobile",
+      "status": "pass",
+      "state": "Standby at 390 \u00d7 844",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 390,
+        "height": 844
+      },
+      "observed": "Wordmark wraps deliberately; connection pill and single initialize action fit. Track badge remains visible.",
+      "artifacts": [
+        {
+          "path": "standby-mobile.png",
+          "sha256": "e8c9c6197aa0d13aa6eafb06639799b2abf8ce428a6c07b0ce7f795ad66b032e",
+          "kind": "image"
+        }
+      ]
+    },
+    {
+      "id": "hub-mobile",
+      "status": "pass",
+      "state": "Games hub at 390 \u00d7 844, top and bottom",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 390,
+        "height": 844
+      },
+      "observed": "Primary actions stay above the preview; cards and footer reflow vertically; no horizontal overflow.",
+      "artifacts": [
+        {
+          "path": "hub-mobile.png",
+          "sha256": "d819f3a6dda99c457d10175d7a20b8ea007f55cc44deb1b280415f95b5c59a71",
+          "kind": "image"
+        },
+        {
+          "path": "hub-mobile-activities.png",
+          "sha256": "69cc73682043e4889a7a4af48e04f5cd3245f1d2ae793588a70d04c3766cabc7",
+          "kind": "image"
+        }
+      ]
+    },
+    {
+      "id": "controls-mobile",
+      "status": "pass",
+      "state": "Scrollable native dialog at 390 \u00d7 844",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 390,
+        "height": 844
+      },
+      "observed": "Single-column controls, dedicated keyboard abilities and close button remain reachable without horizontal scrolling.",
+      "artifacts": [
+        {
+          "path": "controls-mobile.png",
+          "sha256": "05c81ec104a5c56b767a8b18982bb53ccd0f087b2c2731be7d6816fa0ea0edeb",
+          "kind": "image"
+        },
+        {
+          "path": "controls-mobile-bottom.png",
+          "sha256": "e485962f37c82506be7f8bb4ae6811821b4188e6d167927c290a5a1ce10d5c12",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Open with C",
+        "Scroll to keyboard-only note",
+        "Close with Escape"
+      ]
+    },
+    {
+      "id": "media-mobile",
+      "status": "pass",
+      "state": "Media at 390 \u00d7 844",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 390,
+        "height": 844
+      },
+      "observed": "Track rows and audio controls reflow without clipped titles; lower footer is reachable by scrolling.",
+      "artifacts": [
+        {
+          "path": "media-mobile.png",
+          "sha256": "91d6ff290dfe4a46d5b56f0517c9ef6c0e7a4db9bebd047c9f395d2a34e6205c",
+          "kind": "image"
+        }
+      ]
+    },
+    {
+      "id": "reduced-motion",
+      "status": "pass",
+      "state": "Reduced-motion preference active",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 390,
+        "height": 844
+      },
+      "observed": "Computed animationName is none for both ambient layers; static standby remains legible. Normal animation smoothness is not claimed from still images.",
+      "artifacts": [
+        {
+          "path": "standby-reduced-motion.png",
+          "sha256": "4cee6a8d26bdc1fb6a838af7cf9a809f8a0f7403e61b4a7dca1382c510dfba92",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Emulate prefers-reduced-motion: reduce",
+        "Read computed animationName for ribbon and ambient layer"
+      ]
+    },
+    {
+      "id": "controller-fixture",
+      "status": "pass",
+      "state": "Synthetic standard Gamepad API fixture",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1280,
+        "height": 720
+      },
+      "observed": "Connection/polling state updates; a held Cross initializes once and does not launch combat. Disconnection returns to keyboard status. This is not physical-device evidence.",
+      "artifacts": [
+        {
+          "path": "controller-simulated.png",
+          "sha256": "db5e3bf0ab9f9bc8c2771d8ac460dbb1bcb4e6e1e84e0d91e0e63dbc4a65e27c",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Inject a labeled DualSense Gamepad API fixture",
+        "Hold Cross for 250ms",
+        "Verify hub remains in menu state",
+        "Restore native getGamepads and verify disconnected status"
+      ]
+    },
+    {
+      "id": "campus-hud",
+      "status": "pass",
+      "state": "Live gameplay in Silicon Valley and on Quantum Vault",
+      "environment": {
+        "kind": "browser",
+        "name": "Chromium / ANGLE Metal, Apple M4; Vite production preview",
+        "width": 1280,
+        "height": 720
+      },
+      "observed": "Campus remains walkable past z=400; district badge matches; pad lands at y=11.3 eye height on the 9.5m vault.",
+      "artifacts": [
+        {
+          "path": "04-zone-silicon-valley.png",
+          "sha256": "094047f13df4ca08dab891a2cdf95ae374273dd64aee41d0765235d0011e7fc0",
+          "kind": "image"
+        },
+        {
+          "path": "04-quantum-vault.png",
+          "sha256": "c995c8cea7757b360271725d48a70ce37725d98cfa38fc32892ca0528f631d0f",
+          "kind": "image"
+        }
+      ],
+      "steps": [
+        "Travel to campus at (0,2.4,460)",
+        "Check ground height and district HUD",
+        "Move to launch pad (0,2.4,420)",
+        "Wait for ballistic flight and verify landing position"
+      ]
+    }
+  ],
+  "unresolved": [],
+  "unavailableChecks": [
+    "No physical DualSense was attached; console input was tested using a labeled Gamepad API fixture.",
+    "Hardware controller latency and battery are not exposed by the browser Gamepad API; UI reports unavailable battery and labels measured browser polling separately.",
+    "No generated UI image or Uizze reference provider was available; no pixel-identical comparison is claimed."
+  ],
+  "validation": {
+    "vitest": "202/202 passed",
+    "typescript": "tsc --noEmit exited 0",
+    "build": "vite build succeeded",
+    "browser": "30/30 checks passed, 0 browser errors; see results.json"
+  }
+}

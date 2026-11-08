@@ -111,13 +111,80 @@ try {
   })
   console.log('GL renderer:', results.gl)
 
+  // ---- console UX: real keyboard/buttons, responsive layout, modal focus ----
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.evaluate(() => document.fonts.ready)
+  await shot('standby-desktop')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('[data-ps5-phase="dashboard"]')
+  check('Enter initializes the hub without launching combat', (await stats()).status === 'menu')
+  await shot('hub-desktop')
+  check('desktop hub includes its footer without scrolling', await page.locator('.console-shell').evaluate((el) => el.scrollHeight <= el.clientHeight + 1))
+  await page.getByRole('button', { name: 'CONTROLS & TACTICS', exact: true }).click()
+  await page.waitForSelector('dialog[open]')
+  await shot('controls-desktop')
+  check('controls clearly reserve keyboard V/G and separate C slide', await page.locator('dialog').innerText().then((text) => text.includes('V and G are keyboard only') && text.includes('Slide · ground only')))
+  await page.keyboard.press('Tab')
+  check('native dialog traps keyboard focus', await page.evaluate(() => !!document.activeElement?.closest('dialog')))
+  await page.keyboard.press('Escape')
+  check('Escape closes controls and restores the invoker', await page.evaluate(() => !document.querySelector('dialog').open && document.activeElement?.textContent.includes('CONTROLS & TACTICS')))
+  await page.getByRole('button', { name: 'MEDIA', exact: true }).click()
+  await shot('media-desktop')
+  const originalTrack = (await stats()).music.trackIndex
+  await page.keyboard.press('KeyN')
+  const nextTrack = (await stats()).music
+  check('N changes the live synth title and BPM in media', nextTrack.trackIndex === (originalTrack + 1) % 3 && await page.locator('.console-track').innerText().then((text) => text.includes(nextTrack.trackName) && text.includes(String(nextTrack.bpm))))
+  await page.locator('.console-track-button').click()
+  check('track button cycles the same synth engine', (await stats()).music.trackIndex === (originalTrack + 2) % 3)
+  await page.keyboard.press('KeyN')
+  await page.getByRole('button', { name: 'GAMES', exact: true }).click()
+  await page.keyboard.press('KeyO')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await shot('standby-mobile')
+  await page.keyboard.press('Enter')
+  await shot('hub-mobile')
+  check('mobile hub has no horizontal overflow', await page.locator('.console-shell').evaluate((el) => el.scrollWidth <= el.clientWidth))
+  await page.locator('.console-footer').scrollIntoViewIfNeeded()
+  await shot('hub-mobile-activities')
+  await page.keyboard.press('KeyC')
+  await shot('controls-mobile')
+  await page.locator('.console-control-note').scrollIntoViewIfNeeded()
+  await shot('controls-mobile-bottom')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'MEDIA', exact: true }).click()
+  await shot('media-mobile')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('KeyO')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  check('reduced motion disables both ambient animations', await page.locator('.console-ribbons, .ps5-ambient-ribbon').evaluateAll((els) => els.every((el) => getComputedStyle(el).animationName === 'none')))
+  await shot('standby-reduced-motion')
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.setViewportSize({ width: 1280, height: 720 })
+
+  // Synthetic Gamepad API fixture; no physical controller telemetry is claimed.
+  await page.evaluate(() => {
+    window.__savedGetGamepads = navigator.getGamepads.bind(navigator)
+    window.__consolePad = { index: 0, id: 'DualSense test fixture', connected: true, mapping: 'standard', buttons: Array.from({ length: 17 }, () => ({ pressed: false })) }
+    navigator.getGamepads = () => [window.__consolePad]
+  })
+  await sleep(650)
+  check('controller connection is live; battery remains unavailable', await page.locator('.console-controller').innerText().then((text) => text.includes('CONNECTED') && text.includes('POLL') && text.includes('—')))
+  await page.evaluate(() => { window.__consolePad.buttons[0].pressed = true })
+  await sleep(250)
+  check('holding controller cross only initializes once', (await stats()).status === 'menu' && await page.locator('[data-ps5-phase="dashboard"]').count() === 1)
+  await shot('controller-simulated')
+  await page.evaluate(() => { navigator.getGamepads = window.__savedGetGamepads; delete window.__consolePad; delete window.__savedGetGamepads })
+  await page.keyboard.press('KeyO')
+  await sleep(650)
+  check('controller disconnect restores keyboard status', await page.locator('.console-controller').innerText().then((text) => text.includes('OFFLINE')))
+
   await sampleFps('menu', 3000)
   await shot('01-menu')
 
-  // ---- start (wake from standby if needed, then real click on PLAY GAME) ----
+  // ---- start (wake from standby, then launch through the real UI) ----
   await page.keyboard.press('Enter')
   await sleep(400)
-  const playBtn = page.getByRole('button', { name: /play/i })
+  const playBtn = page.getByRole('button', { name: /launch protocol|play game/i })
   if (await playBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await playBtn.click()
   } else {
@@ -128,6 +195,13 @@ try {
   check('start → playing', s0.status === 'playing', { status: s0.status })
   const musicStart = s0.music
   await neon('setGod', true)
+  // Three.js uploads static geometry on first visibility. Warm the expanded map
+  // before the leak baseline, so later district visits do not look like leaks.
+  for (const [x, z, yaw] of [[0, -330, 0], [-2, 330, Math.PI], [0, 460, Math.PI], [0, 620, 0], [0, 0, 0], [0, 0, Math.PI], [0, 180, 0]]) {
+    await neon('setPos', x, 2.4, z)
+    await neon('look', yaw, 0)
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  }
   await sleep(600)
   const s0b = await stats()
   const freshObjects = s0b.sceneObjects
@@ -152,6 +226,7 @@ try {
   await page.mouse.up()
   s = await stats()
   check('fire (LMB) consumes ammo', s.ammo.rifle < ammo0, { before: ammo0, after: s.ammo.rifle })
+  check('held rifle fires continuously; mouse does not trigger parry/slam', ammo0 - s.ammo.rifle >= 5 && s.abilities.pulseParry.remaining === 0 && s.abilities.kineticSlam.remaining === 0, { shotsIn500ms: ammo0 - s.ammo.rifle })
 
   // ---- reload ----
   await page.keyboard.press('KeyR')
@@ -182,6 +257,7 @@ try {
   s = await stats()
   const moved = Math.hypot(s.pos.x - p0.x, s.pos.z - p0.z)
   check('slide C while moving', sl.slideT > 0 && moved > 3, { slideT: sl.slideT, moved: +moved.toFixed(2) })
+  check('C does not trigger kinetic slam', sl.abilities.kineticSlam.remaining === 0)
 
   // ---- combat: fight real enemies for N seconds with real mouse input ----
   const baseObjects = (await stats()).sceneObjects
@@ -244,13 +320,23 @@ try {
   const zones = [
     ['zone-plaza', 0, 2.4, -330],
     ['zone-courtyard', -2, 2.4, 330],
+    ['zone-silicon-valley', 0, 2.4, 460],
     ['zone-bridge', 0, 2.4, 0],
   ]
   for (const [name, x, y, z] of zones) {
     await neon('setPos', x, y, z)
-    await neon('look', 0, 0)
+    await neon('look', name === 'zone-silicon-valley' ? Math.PI : 0, 0)
     await sampleFps(name, 1500)
     await shot(`04-${name}`)
+    if (name === 'zone-silicon-valley') {
+      s = await stats()
+      check('campus travel is walkable past z=400 with a live district badge', s.pos.z > 400 && Math.abs(s.pos.y - 2.4) < 0.1 && s.district === 'SILICON VALLEY // QUANTUM CAMPUS' && await page.locator('.hud-district').textContent().then((text) => text === s.district), { pos: s.pos, district: s.district })
+      await neon('setPos', 0, 2.4, 420)
+      await sleep(3000)
+      s = await stats()
+      check('campus jump pad lands on the Quantum Vault', s.pos.z > 480 && s.pos.z < 560 && Math.abs(s.pos.y - 11.3) < 0.1, { pos: s.pos })
+      await shot('04-quantum-vault')
+    }
   }
   s = await stats()
   check('zone travel keeps playing', s.status === 'playing', { status: s.status })
@@ -321,4 +407,5 @@ try {
   writeFileSync(join(OUT, 'results.json'), JSON.stringify(results, null, 2))
   console.log(`\n${results.passed}/${results.total} checks passed, ${results.consoleErrors} errors → ${OUT}`)
   await browser.close()
+  if (results.passed !== results.total || results.consoleErrors > 0) process.exitCode = 1
 }
