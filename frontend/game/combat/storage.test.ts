@@ -12,7 +12,7 @@ describe('player profiles', () => {
   it('returns independent default profiles without writing storage', () => {
     const first = loadProfile()
     expect(first).toEqual({ highScore: 0, maxWave: 0, maxCombo: 0, totalKills: 0, totalGloryKills: 0,
-      unlockedHacks: [], sfxVolume: 0.7, musicVolume: 0.6 })
+      unlockedHacks: [], sfxVolume: 0.7, musicVolume: 0.6, musicTrackIndex: 0 })
     first.unlockedHacks.push('ricochet')
     first.highScore = 9
     expect(loadProfile()).toEqual(DEFAULT_PROFILE)
@@ -21,7 +21,7 @@ describe('player profiles', () => {
 
   it('round trips all fields and merges partial updates without mutating inputs', () => {
     const profile: PlayerProfile = { highScore: 500, maxWave: 2, maxCombo: 5, totalKills: 10,
-      totalGloryKills: 3, unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.9 }
+      totalGloryKills: 3, unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.9, musicTrackIndex: 2 }
     expect(saveProfile(profile)).toEqual(profile)
     expect(loadProfile()).toEqual(profile)
     const saved = saveProfile({ musicVolume: 0.1 })
@@ -35,6 +35,26 @@ describe('player profiles', () => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, raw)
     expect(loadProfile()).toEqual(DEFAULT_PROFILE)
     expect(saveProfile({ highScore: 7 }).highScore).toBe(7)
+  })
+
+  it.each([0, 1, 2])('persists track %s across partial updates and recorded runs', (musicTrackIndex) => {
+    saveProfile({ musicTrackIndex })
+    saveProfile({ musicVolume: 0.25 })
+    record()
+    expect(loadProfile()).toMatchObject({ musicTrackIndex, musicVolume: 0.25, highScore: 1200 })
+    expect(JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY)!)).toHaveProperty('musicTrackIndex', musicTrackIndex)
+  })
+
+  it.each([-1, 3, 999, 1.5, NaN, Infinity, '2', null, undefined])('ignores invalid track index %s', (value) => {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({ musicTrackIndex: value }))
+    expect(loadProfile().musicTrackIndex).toBe(0)
+    saveProfile({ musicTrackIndex: 2 })
+    expect(saveProfile({ musicTrackIndex: value } as Partial<PlayerProfile>).musicTrackIndex).toBe(2)
+  })
+
+  it('migrates older profiles to the original track', () => {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({ highScore: 50, musicVolume: 0.4 }))
+    expect(loadProfile()).toMatchObject({ highScore: 50, musicVolume: 0.4, musicTrackIndex: 0 })
   })
 
   it('fills missing fields, clamps numbers, filters hacks, and ignores unknown fields', () => {
@@ -82,7 +102,7 @@ describe('player profiles', () => {
     expect(record()).toMatchObject({ highScore: 1200, maxWave: 3, maxCombo: 8, totalKills: 15, totalGloryKills: 4 })
     const next = record({ score: 50, wave: 5, combo: 2, kills: 3, gloryKills: 1, activeHacks: ['ricochet', 'bass_drop'] })
     expect(next).toEqual({ highScore: 1200, maxWave: 5, maxCombo: 8, totalKills: 18, totalGloryKills: 5,
-      unlockedHacks: ['ricochet', 'bass_drop'], sfxVolume: 0, musicVolume: 0.25 })
+      unlockedHacks: ['ricochet', 'bass_drop'], sfxVolume: 0, musicVolume: 0.25, musicTrackIndex: 0 })
     expect(loadProfile()).toEqual(next)
     expect(record({ score: 5000, combo: 12 }).highScore).toBe(5000)
     expect(loadProfile().maxCombo).toBe(12)

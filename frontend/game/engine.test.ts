@@ -29,18 +29,17 @@ vi.mock('./environment', () => ({
     randomSpawnPoint: () => new THREE.Vector3(0, 3, -100), update() {},
   }),
 }))
-vi.mock('./music', () => ({
-  SynthMusic: class {
+vi.mock('./music', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./music')>()
+  return { ...original, SynthMusic: class extends original.SynthMusic {
     start = vi.fn()
-    setIntensity = vi.fn()
-    setVolume = vi.fn()
-    setMuted = vi.fn()
-    setComboRank = vi.fn()
-    triggerFilterDrop = vi.fn()
-    dispose = vi.fn()
-    debugState = vi.fn(() => ({}))
-  },
-}))
+    setIntensity = vi.fn(super.setIntensity.bind(this))
+    setVolume = vi.fn(super.setVolume.bind(this))
+    setMuted = vi.fn(super.setMuted.bind(this))
+    setComboRank = vi.fn(super.setComboRank.bind(this))
+    triggerFilterDrop = vi.fn(super.triggerFilterDrop.bind(this))
+  } }
+})
 
 let engine: GameEngine
 beforeEach(() => {
@@ -414,6 +413,55 @@ describe('engine neon hack integration', () => {
 
 
 describe('engine persistence and layered audio', () => {
+  it('cycles tracks once per key press, emits the name and banner, and restores the selection', () => {
+    const onHud = vi.fn()
+    engine['onHud'] = onHud
+    saveProfile({ musicVolume: 0.25, highScore: 500 })
+    key('KeyN')
+    expect(engine['music'].getCurrentTrackIndex()).toBe(1)
+    expect(loadProfile()).toMatchObject({ musicTrackIndex: 1, musicVolume: 0.25, highScore: 500 })
+    expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({
+      musicTrackName: 'HOTLINE MIDNIGHT', banner: 'TRACK // HOTLINE MIDNIGHT [128 BPM]',
+    }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', repeat: true }))
+    expect(engine['music'].getCurrentTrackIndex()).toBe(1)
+    key('KeyN')
+    expect(engine['music'].getCurrentTrackIndex()).toBe(2)
+    key('KeyN')
+    expect(engine['music'].getCurrentTrackIndex()).toBe(0)
+    key('KeyN')
+    engine.dispose()
+    engine = new GameEngine(document.createElement('div'), onHud)
+    expect(engine['music'].getCurrentTrackIndex()).toBe(1)
+    expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({ musicTrackName: 'HOTLINE MIDNIGHT' }))
+  })
+
+  it.each(['menu', 'paused', 'over'] as const)('allows track selection in %s', (status) => {
+    engine['status'] = status
+    key('KeyN')
+    expect(loadProfile().musicTrackIndex).toBe(1)
+  })
+
+  it('ignores track shortcuts during typing, composition, modified keys, and drafts', () => {
+    for (const tag of ['input', 'textarea', 'select', 'div']) {
+      const element = document.createElement(tag)
+      if (tag === 'div') element.setAttribute('contenteditable', 'true')
+      const target = tag === 'div' ? element.appendChild(document.createElement('span')) : element
+      document.body.appendChild(element)
+      target.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', bubbles: true }))
+      element.remove()
+    }
+    for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'isComposing']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', [modifier]: true }))
+    }
+    engine['draftHacks'] = engine.hackManager.getRandomDraft(3)
+    expect(engine['draftHacks'].length).toBeGreaterThan(0)
+    key('KeyN')
+    expect(engine['music'].getCurrentTrackIndex()).toBe(0)
+    expect(loadProfile().musicTrackIndex).toBe(0)
+    expect(engine['banner']).not.toContain('TRACK //')
+  })
+
   it('records death once, preserving best combo, glory kills, selected hacks and audio preferences', () => {
     saveProfile({ musicVolume: 0.25, sfxVolume: 0.2 })
     engine.hackManager.apply('bass_drop')
@@ -428,7 +476,7 @@ describe('engine persistence and layered audio', () => {
     engine.damagePlayer(1000)
     expect(engine['music'].setComboRank).toHaveBeenLastCalledWith(0)
     expect(loadProfile()).toEqual({ highScore: score, maxWave: 3, maxCombo: 1, totalKills: 1, totalGloryKills: 1,
-      unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.25 })
+      unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.25, musicTrackIndex: 0 })
     expect(engine['debugApi']().profile()).toEqual(loadProfile())
     engine.damagePlayer(1000)
     engine.restart()

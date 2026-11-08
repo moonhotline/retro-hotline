@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SynthMusic } from './music'
+import { SYNTH_TRACKS, SynthMusic } from './music'
 
 class Param {
   value = 1
@@ -55,6 +55,150 @@ beforeEach(() => {
   music = new SynthMusic()
 })
 afterEach(() => { music.dispose(); vi.useRealTimers(); vi.unstubAllGlobals() })
+
+describe('procedural track selection', () => {
+  it('lists three distinct tracks and returns metadata without exposing mutable track definitions', () => {
+    const tracks = music.getTracks()
+    expect(tracks).toEqual([
+      { id: 'bay-bridge-runner', name: 'BAY BRIDGE RUNNER', genre: 'Synthwave', bpm: 116 },
+      { id: 'hotline-midnight', name: 'HOTLINE MIDNIGHT', genre: 'Darksynth / EBM', bpm: 128 },
+      { id: 'cyber-overdrive', name: 'CYBER OVERDRIVE', genre: 'Acid Breakbeat / Neuro', bpm: 140 },
+    ])
+    expect(music.getCurrentTrack()).toEqual(tracks[0])
+    tracks[0]!.bpm = 1
+    music.getCurrentTrack().name = 'changed'
+    expect(music.debugState()).toMatchObject({ trackIndex: 0, trackName: 'BAY BRIDGE RUNNER', bpm: 116 })
+    expect(Context.instances).toHaveLength(0)
+  })
+
+  it('cycles round robin and safely normalizes finite indices before startup', () => {
+    for (const index of [1, 2, 0, 1]) {
+      expect(music.nextTrack()).toEqual(music.getTracks()[index])
+      expect(music.getCurrentTrackIndex()).toBe(index)
+    }
+    for (const [input, index] of [[-1, 2], [3, 0], [7.9, 1], [-4, 2], [0, 0]]) {
+      music.setTrack(input!)
+      expect(music.getCurrentTrackIndex()).toBe(index)
+    }
+    music.setTrack(2)
+    for (const invalid of [NaN, Infinity, -Infinity]) music.setTrack(invalid)
+    music.start()
+    expect(music.debugState()).toMatchObject({ trackIndex: 2, trackName: 'CYBER OVERDRIVE', bpm: 140 })
+    advance(0.045)
+    expect(music.debugState().nextTime).toBeCloseTo(0.1 + 60 / 140 / 4)
+  })
+
+  it('preserves the original chord sections and lead, with four complete bars per track', () => {
+    expect(SYNTH_TRACKS[0]!.progA).toEqual([
+      [110, 130.81, 164.81, 220], [110, 130.81, 164.81, 220],
+      [87.31, 110, 130.81, 174.61], [98, 123.47, 146.83, 196],
+    ])
+    expect(SYNTH_TRACKS[0]!.progB).toEqual([
+      ...SYNTH_TRACKS[0]!.progA.slice(0, 3), [82.41, 103.83, 123.47, 164.81],
+    ])
+    expect(SYNTH_TRACKS[0]!.lead).toEqual([
+      [0, -1, -1, 2, -1, -1, 1, -1, -1, 3, -1, 2, -1, 1, -1, -1],
+      [-1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1, -1, 0, -1, -1, -1],
+      [3, -1, -1, 2, -1, -1, 1, -1, 2, -1, -1, 0, -1, -1, 1, -1],
+      [-1, 2, -1, -1, 3, -1, 2, -1, -1, 1, -1, 0, -1, -1, -1, -1],
+    ])
+    for (const track of SYNTH_TRACKS) {
+      expect(track.progA).toHaveLength(4)
+      expect(track.progB).toHaveLength(4)
+      expect(track.lead).toHaveLength(4)
+      for (const bar of track.lead) {
+        expect(bar).toHaveLength(16)
+        expect(bar.every((tone) => Number.isInteger(tone) && tone >= -1 && tone <= 3)).toBe(true)
+      }
+    }
+  })
+
+  it('switches at the next unscheduled beat without losing mix, combo, mute, or clock continuity', () => {
+    music.setVolume(0.27)
+    music.setMuted(true)
+    music.setIntensity(3)
+    music.setComboRank(10)
+    music.start()
+    music.triggerFilterDrop(200, 5000)
+    const play = vi.spyOn(music as any, 'playStep')
+    advance(0.045)
+    const buses = stems()
+    const levels = buses.map((bus) => bus.gain.value)
+    for (const index of [1, 2, 0]) {
+      const before = music.debugState()
+      const count = play.mock.calls.length
+      music.setTrack(index)
+      music.setTrack(index)
+      expect(music.debugState()).toMatchObject({
+        step: before.step, nextTime: before.nextTime, volume: 0.27, muted: true,
+        intensity: 3, combo: 10, rank: 'ULTRA', stems: before.stems, filterDropping: true,
+      })
+      for (let tick = 0; tick < 16; tick++) advance(0.045)
+      const calls = play.mock.calls.slice(count) as [number, number][]
+      expect(calls.length).toBeGreaterThan(3)
+      expect(calls[0]).toEqual([before.step, before.nextTime])
+      const interval = 60 / SYNTH_TRACKS[index]!.bpm / 4
+      for (let i = 1; i < calls.length; i++) {
+        expect(calls[i]![0]).toBe(calls[i - 1]![0] + 1)
+        expect(calls[i]![1] - calls[i - 1]![1]).toBeCloseTo(interval)
+      }
+      expect(stems()).toEqual(buses)
+      expect(stems().map((bus) => bus.gain.value)).toEqual(levels)
+      expect(music.debugState().nextTime).toBeGreaterThan(before.nextTime)
+    }
+    expect(Context.instances).toHaveLength(1)
+    expect(ctx().close).not.toHaveBeenCalled()
+    expect(ctx().resume).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(1)
+    music.setMuted(false)
+    expect(ctx().gains[0]!.gain.value).toBe(0.27)
+  })
+
+  it.each([0, 1, 2])('recovers from suspension and stale scheduling using track %s tempo', (index) => {
+    music.start()
+    advance(0.045)
+    ctx().state = 'suspended'
+    music.setTrack(index)
+    const before = music.debugState()
+    advance(200)
+    expect(music.debugState().step).toBe(before.step)
+    const play = vi.spyOn(music as any, 'playStep')
+    music.start()
+    advance(0.045)
+    const calls = play.mock.calls as [number, number][]
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.length).toBeLessThanOrEqual(2)
+    for (const [, time] of calls) expect(time).toBeGreaterThanOrEqual(ctx().currentTime)
+    expect(music.debugState().nextTime).toBeGreaterThanOrEqual(ctx().currentTime + 0.16)
+    expect(music.debugState().nextTime - calls.at(-1)![1]).toBeCloseTo(60 / SYNTH_TRACKS[index]!.bpm / 4)
+    expect(Context.instances).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(1)
+  })
+
+  it.each([
+    [0, [0, 4, 8, 12], 0], [1, [0, 4, 8, 12], 12], [2, [0, 6, 10], 16],
+  ] as const)('plays the distinct kick and bass pattern for track %s', (index, kicks, bassNotes) => {
+    music.setTrack(index)
+    music.start()
+    const kick = vi.spyOn(music as any, 'kick')
+    const hit = vi.spyOn(music as any, 'hit')
+    const bass = vi.spyOn(music as any, 'synthBass')
+    for (let step = 0; step < 16; step++) music['playStep'](step, 1 + step * music['step16'])
+    expect(kick.mock.calls.map(([at]) => Math.round(((at as number) - 1) / music['step16']))).toEqual(kicks)
+    expect(bass).toHaveBeenCalledTimes(bassNotes)
+    const snareHz = [1900, 2400, 2600][index]
+    expect(hit.mock.calls.filter(([, frequency]) => frequency === snareHz)
+      .map(([at]) => Math.round(((at as number) - 1) / music['step16']))).toEqual([4, 12])
+    if (index === 1) {
+      expect(ctx().sources.some((source) => source.frequency.exponentialRampToValueAtTime.mock.calls
+        .some(([frequency, time]) => frequency === 73.42 && Math.abs(time - 1.025) < 1e-6))).toBe(true)
+    }
+    if (index === 2) expect(ctx().filters.some((filter) => filter.Q.value === 9 &&
+      filter.frequency.exponentialRampToValueAtTime.mock.calls.length > 0)).toBe(true)
+    music.dispose()
+    expect(ctx().sources.every((source) => source.disconnect.mock.calls.length === 1)).toBe(true)
+  })
+})
 
 describe('continuous multi-stem score', () => {
   it('connects all five stem buses through the master lowpass and routes voices into each bus', () => {

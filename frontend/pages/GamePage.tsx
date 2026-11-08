@@ -81,8 +81,21 @@ function HitMarker({ id, crit }: { id: number; crit: boolean }) {
   )
 }
 
+function TrackBadge({ name }: { name?: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#060810]/90 px-3 py-2 text-[10px] font-medium tracking-wide text-slate-200" role="status" aria-live="polite" aria-atomic="true">
+      <svg className="h-4 w-4 shrink-0 text-[#9ffcff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+        <path d="M4 10v4m4-7v10m4-14v18m4-14v10m4-7v4" />
+      </svg>
+      <span>TRACK: {name || 'BAY BRIDGE RUNNER'}</span>
+      <kbd className="shrink-0 text-[#9ffcff]">[N]</kbd>
+    </span>
+  )
+}
+
 function Hud({ hud }: { hud: HudState }) {
   const wave = Math.max(hud.wave, 1)
+  const trackBanner = hud.banner.startsWith('TRACK // ')
   return (
     <div className="pointer-events-none absolute inset-0 select-none z-10">
       {/* damage vignette */}
@@ -96,6 +109,10 @@ function Hud({ hud }: { hud: HudState }) {
 
       <Crosshair />
       <HitMarker id={hud.hitMarkerId} crit={hud.hitMarkerCrit} />
+
+      <div className="absolute left-4 top-28 max-w-[calc(100%-2rem)]">
+        <TrackBadge name={hud.musicTrackName} />
+      </div>
 
       <div className="ability-hud font-tech" aria-label="Cyber abilities">
         {ABILITY_INFO.map(({ id, key, label }) => {
@@ -155,8 +172,10 @@ function Hud({ hud }: { hud: HudState }) {
 
       {/* banner */}
       {hud.banner && (
-        <div key={hud.bannerId} className="banner font-orbitron text-4xl font-black text-white">
-          <span className="glitch">{hud.banner}</span>
+        <div key={hud.bannerId} className={trackBanner
+          ? 'absolute left-1/2 top-[23%] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-xl border border-white/10 bg-[#060810]/95 px-4 py-3 text-center text-xs font-medium tracking-wide text-slate-100 sm:text-sm'
+          : 'banner font-orbitron text-4xl font-black text-white'}>
+          <span className={trackBanner ? undefined : 'glitch'}>{hud.banner}</span>
         </div>
       )}
 
@@ -350,6 +369,10 @@ function ControlsGrid() {
           <Kbd>SPACE</Kbd>
           <Kbd>M</Kbd>
         </span>
+      </div>
+      <div className="flex items-center justify-between gap-4 sm:col-span-2">
+        <span>CYCLE WEBAUDIO SYNTH TRACK</span>
+        <Kbd>N</Kbd>
       </div>
     </div>
   )
@@ -592,6 +615,9 @@ export default function GamePage() {
               >
                 PRESS [✕ / ENTER] TO INITIALIZE
               </button>
+              <div className="mt-6">
+                <TrackBadge name={hud.musicTrackName} />
+              </div>
             </main>
           ) : (
             <div className="relative mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-8 px-5 py-6 sm:px-10 lg:px-16 lg:py-8">
@@ -708,6 +734,9 @@ export default function GamePage() {
                 <span><span className="ps5-glyph-triangle" aria-hidden="true">△</span> Audio Mode</span>
                 <span aria-hidden="true">·</span>
                 <span><span className="ps5-glyph-circle" aria-hidden="true">○</span> Standby</span>
+                <div className="w-full pt-1 sm:ml-auto sm:w-auto sm:pt-0">
+                  <TrackBadge name={hud.musicTrackName} />
+                </div>
               </footer>
 
               <dialog
