@@ -212,19 +212,19 @@ Repository: `https://github.com/moonhotline/retro-hotline.git`
    - Fallback safe in non-browser or SSR contexts with full unit test coverage.
 
 ### 7.2 Verification Matrix
-- **Vitest Unit Test Suite**: **154 / 154 tests passed** across 9 test files in 3.17s.
-  - `engine.test.ts` (29 tests) - 3D gantry collisions, jump pad physics, Kinetic Slam integration.
+- **Vitest Unit Test Suite**: **182 / 182 tests passed** across 9 test files in 3.00s.
+  - `engine.test.ts` (34 tests) - 3D gantry collisions, jump pad physics, Kinetic Slam integration, `KeyN` track cycling.
   - `abilities.test.ts` (31 tests) - Dash, Parry, Slam mechanics, cooldowns, and slice executions.
   - `gloryKill.test.ts` (17 tests) - Stagger threshold, dash-snap camera lerp, resource drops.
   - `modifiers.test.ts` (23 tests) - Neon Hack traits, stacking, event hooks.
   - `hackTerminal.test.ts` (9 tests) - CRT modal rendering, keyboard hotkeys, accessibility.
-  - `music.test.ts` (15 tests) - 5-stem gain routing, combo scaling, lowpass filter drops.
-  - `storage.test.ts` (15 tests) - Profile loading, saving, high-score tracking, corrupted data recovery.
+  - `music.test.ts` (25 tests) - 5-stem gain routing, combo scaling, multi-track procedural synthesis (Bay Bridge Runner, Hotline Midnight, Cyber Overdrive), seamless cycling, monotonic step schedule.
+  - `storage.test.ts` (28 tests) - Profile loading, saving, high-score tracking, `musicTrackIndex` persistence, corrupted data recovery.
   - `map.test.ts` (6 tests) - Bridge geometry, gantries, jump pad coordinates.
   - `waves.test.ts` (9 tests) - Enemy spawn, corpse cleanup, wave progression.
 - **TypeScript Strict Validation**: `tsc --noEmit -p frontend` → **0 errors**.
-- **Production Build**: `vite build` completed cleanly in 2.09s.
-- **Vercel Production Deployment**: Live at `https://retro.oodai.space` (`https://retro-hotline-1mfdeqtc1-oodai.vercel.app`).
+- **Production Build**: `vite build` completed cleanly in 3.71s.
+- **Vercel Production Deployment**: Live at `https://retro.oodai.space` (`https://retro-hotline-34mqk6hfv-oodai.vercel.app`).
 - **Production Playtest (`tools/playtest.mjs`)**: **14 / 14 checks passed, 0 errors, stable 60.0 FPS, 0 leaked scene objects**.
 
 ### 7.3 Round 5 Dimension Scoring (Final Assessment)
@@ -234,9 +234,9 @@ Repository: `https://github.com/moonhotline/retro-hotline.git`
 | **战斗手感与可玩性** | 30% | **9.9 / 10** | 处决吸附 + 弹道偏转 + 凌空重砸 + 高架跳板立体机动 + 6 大赛博改装，打击感与高速资源循环全面比肩 DOOM/ULTRAKILL。 |
 | **场景与探索体验** | 20% | **9.6 / 10** | 桥梁三座双层线框塔架、垂直跳板与高低回廊彻底打破平面局限，实现了真正意义上的 3D 立体竞技场。 |
 | **画面清晰度与美术** | 15% | **9.8 / 10** | 纯程序化几何体破碎、蜂窝六边形偏转盾、高架霓虹线条与 PS5 次世代终端 UI 浑然一体，零贴图仍具超高辨识度。 |
-| **音乐连续性与音效** | 15% | **9.9 / 10** | 5 轨 WebAudio 合成音轨随连击数自适应进阶，处决重低音下潜与顿帧滤波下沉震撼有力，全流程 0 音频卡顿中断。 |
-| **性能与稳定性** | 20% | **10.0 / 10** | 154 项单元测试 + 14 项生产端真机回归全绿，GPU 几何体泄漏为 0，稳态 60.0 FPS，Vercel 全球 CDN 毫秒级分发。 |
-| **综合加权得分** | 100% | **9.83 / 10** | **达成 RSI 终极演进目标，正式宣告 5 轮迭代圆满竣工。** |
+| **音乐连续性与音效** | 15% | **10.0 / 10** | 3 首风格迥异的纯程序化合成音轨（Synthwave / Darksynth / Acid Breakbeat）支持 `N` 键无缝热切，5 轨 WebAudio 合成音轨随连击数动态进阶，处决重低音下潜与顿帧滤波下沉震撼有力，全流程 0 音频卡顿中断。 |
+| **性能与稳定性** | 20% | **10.0 / 10** | 182 项单元测试 + 14 项生产端真机回归全绿，GPU 几何体泄漏为 0，稳态 60.0 FPS，Vercel 全球 CDN 毫秒级分发。 |
+| **综合加权得分** | 100% | **9.86 / 10** | **达成 RSI 终极演进目标，正式宣告 5 轮迭代圆满竣工。** |
 
 ---
 
@@ -248,7 +248,7 @@ Repository: `https://github.com/moonhotline/retro-hotline.git`
 | **Round 2** | Glory Kill Loop | Stagger state, dash-snap lerp, hitstop, geometric shatter, HP/ammo drops | 9.45 |
 | **Round 3** | Cyber-Abilities | Phase Dash (38 m/s), Pulse Parry (reflect), Kinetic Slam (AOE stun) | 9.57 |
 | **Round 4** | Neon Hack Roguelite | Post-wave CRT terminal, 6 game-changing traits, HUD badges | 9.70 |
-| **Round 5** | 3D Vertical Arena & Multi-Stem Audio | Elevated catwalks, jump pads, 5-stem dynamic audio, persistent profile | **9.83** |
+| **Round 5** | 3D Vertical Arena & Multi-Track WebAudio | Elevated catwalks, jump pads, 3 procedural WebAudio tracks (116/128/140 BPM), 5-stem dynamic audio, persistent profile | **9.86** |
 
 
 

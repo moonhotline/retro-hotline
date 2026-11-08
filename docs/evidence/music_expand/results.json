@@ -1,0 +1,217 @@
+{
+  "url": "https://retro.oodai.space",
+  "startedAt": "2026-11-08T06:21:42.849Z",
+  "checks": [
+    {
+      "name": "start → playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "weapon swap Q (rifle→deagle→rifle)",
+      "pass": true,
+      "weapon": "rifle"
+    },
+    {
+      "name": "fire (LMB) consumes ammo",
+      "pass": true,
+      "before": 32,
+      "after": 27
+    },
+    {
+      "name": "reload R refills mag",
+      "pass": true,
+      "reloading": true,
+      "ammo": 32
+    },
+    {
+      "name": "punch F triggers cooldown",
+      "pass": true,
+      "punchCd": 0.48339999999851
+    },
+    {
+      "name": "slide C while moving",
+      "pass": true,
+      "slideT": 0.46689999999850984,
+      "moved": 7.13
+    },
+    {
+      "name": "enemies spawn and are killable",
+      "pass": true,
+      "kills": 5,
+      "peakEnemies": 1,
+      "shots": 21,
+      "wave": 1
+    },
+    {
+      "name": "no enemy corpses after kills",
+      "pass": true,
+      "enemies": 0,
+      "sceneObjects": 350,
+      "baseObjects": 343,
+      "pickups": 6,
+      "extra": 7
+    },
+    {
+      "name": "zone travel keeps playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "pause/resume",
+      "pass": true,
+      "paused": "paused",
+      "after": "playing"
+    },
+    {
+      "name": "death → game over → restart",
+      "pass": true,
+      "over": true,
+      "status": "playing",
+      "health": 100
+    },
+    {
+      "name": "restart clears enemies (scene back to fresh size)",
+      "pass": true,
+      "enemies": 0,
+      "wave": 0,
+      "sceneObjects": 318,
+      "freshObjects": 318,
+      "leakedObjects": 0
+    },
+    {
+      "name": "GPU geometries do not leak across restart",
+      "pass": true,
+      "geometries": 267,
+      "freshGeometries": 178
+    },
+    {
+      "name": "music never restarted (step monotonic, ctx running)",
+      "pass": true,
+      "start": {
+        "trackIndex": 0,
+        "trackName": "BAY BRIDGE RUNNER",
+        "bpm": 116,
+        "ctx": "running",
+        "step": 2,
+        "nextTime": 0.35862068965517246,
+        "intensity": 1,
+        "combo": 0,
+        "rank": "D",
+        "time": 0.13333333333333333,
+        "volume": 0.6,
+        "muted": false,
+        "stems": {
+          "pad": 0.7,
+          "drum": 0.75,
+          "bass": 1,
+          "arp": 0.16,
+          "lead": 0
+        },
+        "cutoff": 900,
+        "filterDropping": false,
+        "activeSources": 2,
+        "disposed": false
+      },
+      "end": {
+        "trackIndex": 0,
+        "trackName": "BAY BRIDGE RUNNER",
+        "bpm": 116,
+        "ctx": "running",
+        "step": 264,
+        "nextTime": 34.23793103448285,
+        "intensity": 1,
+        "combo": 0,
+        "rank": "D",
+        "time": 34.016,
+        "volume": 0.6,
+        "muted": false,
+        "stems": {
+          "pad": 0.7,
+          "drum": 0.75,
+          "bass": 1,
+          "arp": 0.16,
+          "lead": 0
+        },
+        "cutoff": 900,
+        "filterDropping": false,
+        "activeSources": 11,
+        "disposed": false
+      }
+    }
+  ],
+  "samples": {
+    "menu": {
+      "fps": 60,
+      "frameMsP95": 17.1,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 174,
+      "textures": 14,
+      "sceneObjects": 318,
+      "enemies": 0
+    },
+    "combat": {
+      "fps": 60,
+      "frameMsP95": 18.4,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 284,
+      "textures": 14,
+      "sceneObjects": 350,
+      "enemies": 0
+    },
+    "zone-plaza": {
+      "fps": 60.1,
+      "frameMsP95": 18.6,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 282,
+      "textures": 14,
+      "sceneObjects": 348,
+      "enemies": 0
+    },
+    "zone-courtyard": {
+      "fps": 59.5,
+      "frameMsP95": 18.4,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 285,
+      "textures": 14,
+      "sceneObjects": 348,
+      "enemies": 0
+    },
+    "zone-bridge": {
+      "fps": 60,
+      "frameMsP95": 18.8,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 285,
+      "textures": 14,
+      "sceneObjects": 348,
+      "enemies": 0
+    },
+    "fresh-run": {
+      "fps": 60,
+      "frameMsP95": 18.1,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 279,
+      "textures": 14,
+      "sceneObjects": 348,
+      "enemies": 2
+    }
+  },
+  "errors": [],
+  "gl": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+  "finishedAt": "2026-11-08T06:22:29.377Z",
+  "passed": 14,
+  "total": 14,
+  "consoleErrors": 0
+}
