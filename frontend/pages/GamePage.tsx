@@ -43,9 +43,7 @@ const INITIAL_HUD: HudState = {
 }
 
 const ABILITY_INFO: { id: keyof AbilityStates; key: string; label: string }[] = [
-  { id: 'phaseDash', key: 'SHIFT', label: 'DASH' },
-  { id: 'pulseParry', key: 'V', label: 'PARRY' },
-  { id: 'kineticSlam', key: 'G', label: 'SLAM' },
+  { id: 'phaseDash', key: 'SHIFT', label: 'PHASE DASH' },
 ]
 
 const WEAPON_INFO: Record<WeaponId, string> = {
@@ -218,13 +216,13 @@ function Hud({ hud }: { hud: HudState }) {
         )}
         <div className="mb-1 flex items-end justify-between">
           <span className="font-tech text-[10px] uppercase tracking-[0.3em] text-white/40">HP</span>
-          <span className="font-orbitron text-base font-bold text-white">{hud.health}</span>
+          <span className="font-orbitron text-base font-bold text-white">{hud.health} <span className="text-xs text-white/40">/ {hud.maxHealth || 100}</span></span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full transition-[width] duration-200"
             style={{
-              width: `${hud.health}%`,
+              width: `${Math.min(100, (hud.health / (hud.maxHealth || 100)) * 100)}%`,
               background:
                 hud.health > 50
                   ? 'linear-gradient(90deg,#00f0ff,#39ff88)'
