@@ -38,6 +38,7 @@ vi.mock('./music', async (importOriginal) => {
     setMuted = vi.fn(super.setMuted.bind(this))
     setComboRank = vi.fn(super.setComboRank.bind(this))
     triggerFilterDrop = vi.fn(super.triggerFilterDrop.bind(this))
+    setTimeDilation = vi.fn(super.setTimeDilation.bind(this))
   } }
 })
 

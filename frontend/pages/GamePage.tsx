@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HackTerminal } from '../components/HackTerminal'
+import { StoryModal } from '../components/StoryModal'
 import { ConsoleMenu, TrackBadge } from '../components/ConsoleMenu'
 import type { HackId } from '../game/combat/modifiers'
 import { loadProfile } from '../game/combat/storage'
@@ -49,9 +50,57 @@ const ABILITY_INFO: { id: keyof AbilityStates; key: string; label: string }[] = 
 const WEAPON_INFO: Record<WeaponId, string> = {
   rifle: 'PULSE RIFLE',
   deagle: 'DESERT EAGLE',
+  sniper: 'GAUSS SNIPER',
 }
 
 const MULT_COLOR = ['', 'text-white', 'text-[#ffd319]', 'text-[#ff9f1c]', 'text-[#ff2975]', 'text-[#b18cff]']
+
+function SniperScopeOverlay() {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-30 select-none overflow-hidden">
+      {/* Scope circular aperture mask */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'radial-gradient(circle at center, transparent 30%, rgba(6, 8, 16, 0.95) 35%, #060810 82%)',
+        }}
+      />
+
+      {/* Outer Tactical Reticle Ring */}
+      <div className="absolute left-1/2 top-1/2 h-[56vmin] w-[56vmin] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#00f0ff]/40 shadow-[0_0_20px_rgba(0,240,255,0.25)]">
+        {/* Reticle tick marks */}
+        <div className="absolute left-1/2 top-0 h-4 w-[2px] -translate-x-1/2 bg-[#00f0ff]" />
+        <div className="absolute bottom-0 left-1/2 h-4 w-[2px] -translate-x-1/2 bg-[#00f0ff]" />
+        <div className="absolute left-0 top-1/2 h-[2px] w-4 -translate-y-1/2 bg-[#00f0ff]" />
+        <div className="absolute right-0 top-1/2 h-[2px] w-4 -translate-y-1/2 bg-[#00f0ff]" />
+      </div>
+
+      {/* Inner Precision Ring */}
+      <div className="absolute left-1/2 top-1/2 h-[24vmin] w-[24vmin] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#ff0055]/30" />
+
+      {/* Center crosshair hairlines spanning full display */}
+      <div className="absolute left-0 top-1/2 h-[1px] w-full -translate-y-1/2 bg-[#00f0ff]/40" />
+      <div className="absolute left-1/2 top-0 h-full w-[1px] -translate-x-1/2 bg-[#00f0ff]/40" />
+
+      {/* Center illuminated precision dot */}
+      <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff0055] shadow-[0_0_10px_#ff0055]" />
+
+      {/* Tactical Telemetry */}
+      <div className="absolute left-1/2 top-[30%] -translate-x-1/2 font-tech text-[10px] tracking-[0.3em] text-[#00f0ff]/90">
+        GAUSS OPTICS // 4.0X ZOOM
+      </div>
+      <div className="absolute left-1/2 bottom-[30%] -translate-x-1/2 font-tech text-[10px] tracking-[0.3em] text-[#ffd319]/90">
+        CHRONO LOCK // SYNCHRONIZED
+      </div>
+      <div className="absolute left-[33%] top-1/2 -translate-y-1/2 -translate-x-full pr-4 font-tech text-[9px] tracking-widest text-white/50 hidden sm:block">
+        RANGE 180M
+      </div>
+      <div className="absolute right-[33%] top-1/2 -translate-y-1/2 translate-x-full pl-4 font-tech text-[9px] tracking-widest text-white/50 hidden sm:block">
+        ELEV +0.00
+      </div>
+    </div>
+  )
+}
 
 function Crosshair() {
   const bar = 'absolute bg-[#9ffcff]/90'
@@ -94,8 +143,20 @@ function Hud({ hud }: { hud: HudState }) {
         }}
       />
 
-      <Crosshair />
+      {hud.isAiming && hud.weapon === 'sniper' ? <SniperScopeOverlay /> : <Crosshair />}
       <HitMarker id={hud.hitMarkerId} crit={hud.hitMarkerCrit} />
+
+      {hud.chronoTimeScale !== undefined && hud.chronoTimeScale < 0.25 && (
+        <div className="absolute left-1/2 top-[44%] -translate-x-1/2 rounded-full border border-[#00f0ff]/40 bg-[#060810]/80 px-3 py-0.5 font-orbitron text-[10px] font-bold tracking-widest text-[#00f0ff] backdrop-blur-sm animate-pulse">
+          CHRONO DILATION // {hud.chronoTimeScale.toFixed(2)}X
+        </div>
+      )}
+
+      {hud.interactPrompt && (
+        <div className="absolute left-1/2 top-[54%] -translate-x-1/2 rounded-lg border border-[#ffd319]/60 bg-[#060810]/90 px-4 py-1.5 font-orbitron text-xs font-black tracking-wider text-[#ffd319] shadow-[0_0_12px_rgba(255,211,25,0.4)]">
+          {hud.interactPrompt}
+        </div>
+      )}
 
       <div className="absolute left-4 top-28 max-w-[calc(100%-2rem)]">
         <div className="hud-district font-tech">{hud.district}</div>
@@ -186,11 +247,17 @@ function Hud({ hud }: { hud: HudState }) {
         </div>
       ))}
 
-      {/* wave */}
+      {/* wave / stage */}
       <div className="absolute left-1/2 top-4 -translate-x-1/2 text-center">
-        <div className="font-tech text-[10px] uppercase tracking-[0.4em] text-white/40">STAGE</div>
-        <div className="font-orbitron text-lg font-bold text-white">{wave}</div>
-        <div className="font-tech text-[11px] text-white/50">HOSTILES {hud.remaining}</div>
+        <div className="font-tech text-[10px] uppercase tracking-[0.4em] text-white/40">
+          {hud.chapter ? `CHAPTER 0${hud.chapter}` : 'STAGE'}
+        </div>
+        <div className="font-orbitron text-lg font-bold text-white">
+          {hud.stageName ?? `WAVE ${wave}`}
+        </div>
+        <div className="font-tech text-[11px] text-white/50">
+          {hud.roomName ? `${hud.roomName} · ` : ''}HOSTILES {hud.remaining}
+        </div>
       </div>
 
       {/* score */}
@@ -246,13 +313,19 @@ function Hud({ hud }: { hud: HudState }) {
       {/* weapon + ammo */}
       <div className="absolute bottom-4 right-4 text-right">
         <div className="mb-2 flex items-center justify-end gap-1.5">
-          {(['rifle', 'deagle'] as const).map((id) => {
+          {(hud.unlockedWeapons || (['rifle', 'deagle'] as const)).map((id) => {
             const active = hud.weapon === id
             return (
               <span
                 key={id}
                 className={`weapon-pill rounded-full px-3 py-0.5 font-tech text-[11px] ${
-                  active ? (id === 'deagle' ? 'weapon-pill-active-gold' : 'weapon-pill-active') : ''
+                  active
+                    ? id === 'sniper'
+                      ? 'border border-[#ff0055] text-[#ff0055] bg-[#ff0055]/15 shadow-[0_0_8px_#ff0055]'
+                      : id === 'deagle'
+                        ? 'weapon-pill-active-gold'
+                        : 'weapon-pill-active'
+                    : ''
                 }`}
               >
                 {WEAPON_INFO[id]}
@@ -359,6 +432,16 @@ export default function GamePage() {
 
       {hud.draftOpen && (
         <HackTerminal hacks={hud.draftHacks} wave={hud.wave} onSelect={applyHack} audio={engineRef.current?.sfx} />
+      )}
+
+      {hud.storyModal?.open && (
+        <StoryModal
+          story={hud.storyModal}
+          score={hud.score}
+          onClose={() => engineRef.current?.closeStoryDialogue()}
+          onBuyItem={(item) => engineRef.current?.buyShopItem(item) ?? false}
+          audioPing={() => engineRef.current?.sfx.gloryPing()}
+        />
       )}
 
       {status === 'paused' && !hud.draftOpen && (

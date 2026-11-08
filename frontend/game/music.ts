@@ -118,6 +118,13 @@ export class SynthMusic {
   private disposed = false
   private filterDropUntil = 0
   private filterDropHz = 360
+  private timeDilation = 1.0
+
+  setTimeDilation(scale: number): void {
+    if (!Number.isFinite(scale)) return
+    this.timeDilation = Math.max(0.05, Math.min(1.0, scale))
+    this.applyFilter()
+  }
 
   getTracks(): SynthTrackInfo[] {
     return SYNTH_TRACKS.map(({ id, name, genre, bpm }) => ({ id, name, genre, bpm }))
@@ -310,14 +317,15 @@ export class SynthMusic {
     if (!this.ctx || !this.lp) return
     const now = this.ctx.currentTime
     const frequency = this.lp.frequency
-    const target = FILTER_CUT[this.intensity]!
+    const baseTarget = FILTER_CUT[this.intensity]!
+    const target = baseTarget * (0.12 + 0.88 * Math.pow(this.timeDilation, 1.4))
     this.hold(frequency, now)
     if (now < this.filterDropUntil) {
       const dip = Math.min(this.filterDropHz, target)
       frequency.linearRampToValueAtTime(dip, Math.min(now + 0.02, this.filterDropUntil))
       frequency.setValueAtTime(dip, this.filterDropUntil)
       frequency.setTargetAtTime(target, this.filterDropUntil, 0.16)
-    } else frequency.setTargetAtTime(target, now, 0.9)
+    } else frequency.setTargetAtTime(target, now, 0.2)
   }
 
   private schedule() {
