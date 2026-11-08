@@ -1,3 +1,5 @@
+import type { NeonHack } from './combat/modifiers'
+
 export type GameStatus = 'menu' | 'playing' | 'paused' | 'over'
 export type Mood = 'menu' | 'combat'
 export type DroneType = 'swarm' | 'brawler' | 'gunner' | 'enforcer' | 'marksman' | 'boss'
@@ -53,4 +55,7 @@ export interface HudState {
   overchargeFrac: number
   slideFrac: number
   abilities: AbilityStates
+  draftOpen: boolean
+  draftHacks: NeonHack[]
+  activeHacks: NeonHack[]
 }

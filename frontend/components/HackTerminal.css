@@ -1,0 +1,92 @@
+.hack-terminal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: clamp(1rem, 3vw, 3rem);
+  background: rgba(6, 2, 18, 0.9);
+  cursor: default;
+  scrollbar-color: #00f0ff #0d0221;
+}
+
+.hack-terminal {
+  position: relative;
+  width: min(100%, 65rem);
+  padding: clamp(1rem, 2.8vw, 2.5rem);
+  border: 1px solid #00f0ff;
+  background: #0d0221;
+  color: #e8faff;
+  isolation: isolate;
+  animation: terminal-on 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Static scanlines keep the CRT texture readable without continuous flashing. */
+.hack-terminal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, 0.13) 3px 4px);
+}
+
+.hack-terminal-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.hack-terminal-header h2 { margin: 0; font-size: clamp(1.4rem, 3vw, 2.5rem); font-weight: 900; line-height: 1.2; }
+.hack-terminal-header h2 span { display: block; margin-top: 0.5rem; font: 500 0.95rem sans-serif; color: #9ffcff; }
+.hack-terminal-wave { flex-shrink: 0; margin: 0; text-align: right; color: #ffd319; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.hack-terminal-help { margin: 1.5rem 0; font-size: 0.9rem; line-height: 1.7; color: #c1b4d5; }
+.hack-terminal-help span { display: inline-block; margin-left: 1rem; color: #9ffcff; }
+.hack-draft-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
+
+[data-tier='COMMON'] { --hack-accent: #00f0ff; --hack-ink: #9ffcff; }
+[data-tier='RARE'] { --hack-accent: #ff007f; --hack-ink: #ff9fc4; }
+[data-tier='OVERCLOCK'] { --hack-accent: #ffd319; --hack-ink: #ffe991; }
+
+.hack-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--hack-accent);
+  background: #120924;
+  color: #e8faff;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+.hack-card:hover { background: #251038; }
+.hack-card:focus { outline: 2px solid var(--hack-accent); outline-offset: 4px; background: #251038; }
+.hack-card-meta { display: flex; align-items: center; justify-content: space-between; color: var(--hack-ink); font-size: 0.75rem; }
+.hack-card-meta kbd { padding: 0.1rem 0.45rem; border: 1px solid var(--hack-accent); font: inherit; }
+.hack-tier { letter-spacing: 0.1em; }
+.hack-card-badge { margin: 1.5rem 0 0.8rem; color: var(--hack-accent); font-size: 2.4rem; line-height: 1; }
+.hack-card-name { font-size: 1.45rem; font-weight: 700; line-height: 1.4; }
+.hack-card-alias { margin-top: 0.25rem; color: var(--hack-ink); font-size: 1rem; }
+.hack-card-tagline { min-height: 3rem; margin-top: 1.4rem; font-size: 0.75rem; line-height: 1.5; color: var(--hack-ink); }
+.hack-card-description { margin: 0 0 1.5rem; font-size: 0.9rem; line-height: 1.8; color: #e0d5ef; }
+.hack-card-install { display: flex; justify-content: space-between; margin-top: auto; padding-top: 0.8rem; border-top: 1px solid #564463; font-size: 0.8rem; color: var(--hack-ink); }
+.hack-terminal-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.7rem; margin-top: 1.5rem; color: #c1b4d5; font-size: 0.8rem; }
+.hack-terminal-footer kbd { color: #9ffcff; font: inherit; }
+
+.active-hacks { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; }
+.active-hack-badge { display: grid; place-items: center; min-width: 2rem; height: 2rem; padding: 0 0.3rem; border: 1px solid var(--hack-accent); background: #0d0221; color: var(--hack-ink); font-size: 0.85rem; }
+
+@keyframes terminal-on { from { filter: brightness(1.8); } to { filter: brightness(1); } }
+@media (max-width: 600px) {
+  .hack-terminal-overlay { place-items: start center; padding: 0.75rem; }
+  .hack-terminal-help span { display: block; margin-left: 0; }
+  .hack-draft-cards { grid-template-columns: 1fr; }
+  .hack-card { padding: 1rem; }
+  .hack-card-badge { position: absolute; right: 1rem; top: 2.8rem; margin: 0; font-size: 1.5rem; }
+  .hack-card-name { padding-right: 2.5rem; font-size: 1.25rem; margin-top: 0.8rem; }
+  .hack-card-tagline { margin-top: 0.75rem; min-height: 0; }
+  .hack-card-description { margin: 0.5rem 0 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hack-terminal { animation: none; }
+  .hack-card { transition: none; }
+}

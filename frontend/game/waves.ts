@@ -10,6 +10,7 @@ import { resolveWalls, type Wall } from './map'
 import type { DroneType } from './types'
 import type { Sfx } from './audio'
 import type { Particles } from './effects'
+import type { HackManager, NeonHack } from './combat/modifiers'
 
 export interface Enemy {
   type: DroneType
@@ -37,6 +38,7 @@ export interface Projectile {
 }
 
 export interface CombatHost {
+  hackManager?: HackManager
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   sfx: Sfx
@@ -51,6 +53,7 @@ export interface CombatHost {
   onGloryKill(pos: THREE.Vector3): void
   onWaveStart(wave: number): void
   onWaveClear(): void
+  onWaveDraft?(draftHacks: NeonHack[]): void
   sfxPan(pos: THREE.Vector3): number
   spawnPoint(): THREE.Vector3
   collidables(): THREE.Object3D[]
@@ -73,6 +76,7 @@ export class WaveDirector {
   wave = 0
   enemies: Enemy[] = []
   intermission = 0
+  draftPending = false
   private projectiles: Projectile[] = []
   private queue: DroneType[] = []
   private spawnTimer = 0
@@ -91,6 +95,7 @@ export class WaveDirector {
   }
 
   reset() {
+    this.draftPending = false
     for (const e of this.enemies) {
       this.host.scene.remove(e.parts.group)
       if (e.laser) {
@@ -110,6 +115,10 @@ export class WaveDirector {
     this.queue = []
     this.wave = 0
     this.intermission = 2.2
+  }
+
+  resumeAfterDraft() {
+    this.draftPending = false
   }
 
   raycastTargets(): THREE.Object3D[] {
@@ -151,6 +160,7 @@ export class WaveDirector {
   }
 
   update(dt: number, t: number) {
+    if (this.draftPending) return
     // Wave pacing
     if (this.intermission > 0) {
       this.intermission -= dt
@@ -170,6 +180,7 @@ export class WaveDirector {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i]!
       this.updateEnemy(e, dt, t, pp, collidables)
+      if (this.draftPending) return
     }
 
     // Swept collisions also cover bolts accelerated by Pulse Parry.
@@ -206,6 +217,7 @@ export class WaveDirector {
       if (target) {
         this.damageEnemy(target, p.dmg, true)
         this.removeProjectile(i)
+        if (this.draftPending) return
       } else if (hitPlayer) {
         this.host.damagePlayer(p.dmg)
         this.removeProjectile(i)
@@ -515,6 +527,11 @@ export class WaveDirector {
     if (this.queue.length === 0 && this.enemies.length === 0) {
       this.intermission = 3.2
       this.host.onWaveClear()
+      if (this.wave > 0 && this.host.onWaveDraft && this.host.hackManager) {
+        const draft = this.host.hackManager.getRandomDraft()
+        this.draftPending = draft.length > 0
+        this.host.onWaveDraft(draft)
+      }
     }
   }
 

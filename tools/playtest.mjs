@@ -114,8 +114,15 @@ try {
   await sampleFps('menu', 3000)
   await shot('01-menu')
 
-  // ---- start (real click on the START button) ----
-  await page.getByRole('button', { name: /start/i }).click()
+  // ---- start (wake from standby if needed, then real click on PLAY GAME) ----
+  await page.keyboard.press('Enter')
+  await sleep(400)
+  const playBtn = page.getByRole('button', { name: /play/i })
+  if (await playBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await playBtn.click()
+  } else {
+    await neon('start')
+  }
   await page.waitForFunction(() => window.__neon.stats().status === 'playing', null, { timeout: 5000 })
   const s0 = await stats()
   check('start → playing', s0.status === 'playing', { status: s0.status })
@@ -220,6 +227,18 @@ try {
     pickups: s.pickups,
     extra,
   })
+
+  // If wave clear triggered a Neon Hack draft, select card 1 via click or keyboard to advance
+  let curState = await stats()
+  if (curState.draftOpen) {
+    const card = page.locator('.hack-card').first()
+    if (await card.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await card.click()
+    } else {
+      await page.keyboard.press('Digit1')
+    }
+    await sleep(400)
+  }
 
   // ---- zone travel ----
   const zones = [

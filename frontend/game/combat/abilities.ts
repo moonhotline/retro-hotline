@@ -50,6 +50,8 @@ export class AbilitySystem {
   get isParrying() { return this.parryTimer > 0 }
   get isSlamming() { return this.slamming }
 
+  resetDashCooldown() { this.dashCooldown = 0 }
+
   stats(): AbilityStates {
     const state = (cooldown: number, remaining: number, active: boolean): AbilityState => ({
       cooldown, remaining, active, ready: remaining <= 0 && !active,
@@ -181,6 +183,8 @@ export class AbilitySystem {
     if (!this.slamming) return
     this.slamming = false
     const at = this.host.playerPos().clone()
+    const impact = { radius: 12, staggerAll: false }
+    this.host.hackManager?.onSlam(impact)
     at.y = this.host.groundHeight() + 0.08
     const wave = this.makeLoop(64, 1, CYAN)
     wave.name = 'kinetic-slam-shockwave'
@@ -188,14 +192,14 @@ export class AbilitySystem {
     wave.rotation.x = -Math.PI / 2
     wave.scale.setScalar(0.2)
     this.host.scene.add(wave)
-    this.effects.push({ line: wave, life: 0.5, total: 0.5, radius: 14 })
+    this.effects.push({ line: wave, life: 0.5, total: 0.5, radius: 14 * impact.radius / 12 })
     this.host.addShake(1)
     this.host.sfx.slamImpact()
     this.host.particles.burst(at, new THREE.Color(GOLD), 60, 16, 0.6)
     for (const enemy of [...this.director.enemies]) {
-      if (enemy.parts.group.position.distanceTo(this.host.playerPos()) > 12) continue
+      if (enemy.parts.group.position.distanceTo(this.host.playerPos()) > impact.radius) continue
       const killed = this.director.damageEnemy(enemy, 45, true)
-      if (!killed && enemy.hp <= DRONE_STATS[enemy.type].hp * 0.6) this.director.staggerEnemy(enemy)
+      if (!killed && (impact.staggerAll || enemy.hp <= DRONE_STATS[enemy.type].hp * 0.6)) this.director.staggerEnemy(enemy)
     }
   }
 

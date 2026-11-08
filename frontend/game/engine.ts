@@ -18,6 +18,7 @@ import {
 import { WaveDirector, type CombatHost, type Enemy, type Projectile } from './waves'
 import { GLORY_KILL_BANNER, GloryKillSystem } from './combat/gloryKill'
 import { AbilitySystem } from './combat/abilities'
+import { HackManager, type HackId, type NeonHack } from './combat/modifiers'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -83,6 +84,9 @@ export class GameEngine implements CombatHost {
   private director: WaveDirector
   private gloryKills: GloryKillSystem
   private abilities: AbilitySystem
+  readonly hackManager = new HackManager()
+  private draftHacks: NeonHack[] = []
+  private gameplayTime = 0
   private raycaster = new THREE.Raycaster()
   private tmpA = new THREE.Vector3()
   private tmpB = new THREE.Vector3()
@@ -251,6 +255,11 @@ export class GameEngine implements CombatHost {
       staggered: this.director.enemies.filter((enemy) => enemy.staggerTimer > 0).length,
       gloryDashing: this.gloryKills.isDashing,
       abilities: this.abilities.stats(),
+      draftOpen: this.draftHacks.length > 0,
+      draftHacks: [...this.draftHacks],
+      activeHacks: this.hackManager.list(),
+      speedBoostRemaining: this.hackManager.speedBoostRemaining,
+      ammoEfficiency: this.hackManager.ammoEfficiency,
       invulnerable: this.invulnerable,
       hitstopT: this.hitstopT,
       fov: this.camera.fov,
@@ -328,7 +337,20 @@ export class GameEngine implements CombatHost {
   }
 
   resume() {
+    if (this.draftHacks.length > 0 || this.status !== 'paused') return
     if (this.started) this.setStatus('playing')
+    this.requestLock()
+  }
+
+  applyDraftHack(id: HackId): void {
+    if (this.status !== 'paused' || !this.draftHacks.some((hack) => hack.id === id) || this.hackManager.has(id)) return
+    this.hackManager.apply(id)
+    this.draftHacks = []
+    this.director.resumeAfterDraft()
+    this.keys.clear()
+    this.firing = this.triggerQueued = false
+    this.sfx.gloryPing()
+    this.setStatus('playing')
     this.requestLock()
   }
 
@@ -395,11 +417,20 @@ export class GameEngine implements CombatHost {
   setInvulnerable(active: boolean) { this.invulnerable = active }
 
   deflectProjectile(projectile: Projectile, dt: number) {
-    return this.abilities.deflectProjectile(projectile, dt)
+    const reflected = this.abilities.deflectProjectile(projectile, dt)
+    if (reflected) {
+      this.hackManager.onParry({ refillMagazine: () => {
+        this.ammo[this.weapon] = WEAPONS[this.weapon].mag
+        this.reloading = false
+        this.reloadT = 0
+        this.magDropped = false
+      } })
+    }
+    return reflected
   }
 
   now(): number {
-    return this.clock.elapsedTime
+    return this.gameplayTime
   }
 
   addShake(amount: number) {
@@ -441,7 +472,7 @@ export class GameEngine implements CombatHost {
   damagePlayer(n: number) {
     if (this.status !== 'playing' || this.godMode || this.invulnerable) return
     this.health -= n
-    this.lastHitAt = this.clock.elapsedTime
+    this.lastHitAt = this.gameplayTime
     this.waveDamaged = true
     this.combo = 0
     this.comboTimer = 0
@@ -484,6 +515,13 @@ export class GameEngine implements CombatHost {
   }
 
   onGloryKill(position: THREE.Vector3) {
+    this.hackManager.onGloryKill(position, {
+      enemies: this.director.enemies,
+      maxHp: (enemy) => DRONE_STATS[enemy.type].hp,
+      damageEnemy: (enemy, damage, ignoreShield) => this.director.damageEnemy(enemy, damage, ignoreShield),
+      resetDashCooldown: () => this.abilities.resetDashCooldown(),
+      arc: (from, to) => this.electricArc(from, to),
+    })
     this.spawnPickup(position, -1, 'heal', 35)
     this.spawnPickup(position, -1, 'overcharge')
     this.score += 350
@@ -491,6 +529,7 @@ export class GameEngine implements CombatHost {
     this.setBanner(GLORY_KILL_BANNER)
     this.hitMarkerId++
     this.hitMarkerCrit = true
+    if (this.draftHacks.length > 0) this.emit(true)
   }
 
   onWaveStart(_wave: number) {
@@ -512,6 +551,19 @@ export class GameEngine implements CombatHost {
     this.timescale = 0.35
   }
 
+  onWaveDraft(draftHacks: NeonHack[]) {
+    if (this.status !== 'playing' || draftHacks.length === 0) {
+      this.director.resumeAfterDraft()
+      return
+    }
+    this.draftHacks = [...draftHacks]
+    this.firing = this.triggerQueued = false
+    this.keys.clear()
+    this.setStatus('paused')
+    if (this.isLocked()) document.exitPointerLock()
+    this.sfx.gloryPing()
+  }
+
   // ---------- input ----------
 
   private onResize = () => {
@@ -528,8 +580,12 @@ export class GameEngine implements CombatHost {
   }
 
   private onLockChange = () => {
+    if (this.draftHacks.length > 0) {
+      if (this.isLocked()) document.exitPointerLock()
+      return
+    }
     if (this.isLocked()) {
-      if (this.started) this.setStatus('playing')
+      if (this.started && this.status === 'paused') this.setStatus('playing')
     } else {
       this.firing = false
       this.keys.clear()
@@ -539,6 +595,7 @@ export class GameEngine implements CombatHost {
 
   private onLockError = () => {
     this.lockFailed = true
+    if (this.draftHacks.length > 0) return
     if (this.started && this.status !== 'playing' && this.status !== 'over') {
       this.setStatus('playing')
     }
@@ -566,6 +623,7 @@ export class GameEngine implements CombatHost {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
+    if (this.draftHacks.length > 0) return
     if (e.code === 'Space') e.preventDefault()
     if (e.code === 'KeyM') {
       this.toggleMute()
@@ -603,7 +661,7 @@ export class GameEngine implements CombatHost {
   }
 
   private onContainerClick = () => {
-    if (this.status === 'paused') this.requestLock()
+    if (this.status === 'paused' && this.draftHacks.length === 0) this.requestLock()
   }
 
   // ---------- weapons / abilities ----------
@@ -687,7 +745,7 @@ export class GameEngine implements CombatHost {
 
   private fire() {
     const w = WEAPONS[this.weapon]
-    this.ammo[this.weapon]--
+    this.ammo[this.weapon] -= this.hackManager.ammoCost(this.weapon)
     this.fireCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1)
     this.gunKick = w.kick
     this.recoil += w.recoil
@@ -715,9 +773,13 @@ export class GameEngine implements CombatHost {
     if (hit) {
       end = hit.point
       const enemy = hit.object.userData['enemy'] as Enemy | undefined
+      let damage = w.dmg
+      let ignoreShield = this.weapon === 'deagle'
       if (enemy) {
         const crit = Math.random() < w.critChance
         const dmg = w.dmg * (crit ? 2 : 1)
+        damage = dmg
+        ignoreShield ||= crit
         // The Eagle punches through armor; the rifle does not
         const killed = this.director.damageEnemy(enemy, dmg, this.weapon === 'deagle' || crit)
         this.hitMarkerId++
@@ -730,6 +792,16 @@ export class GameEngine implements CombatHost {
         }
       } else {
         this.particles.burst(end, SPARK_COLOR, 8, 5, 0.35)
+      }
+      if (this.hackManager.has('ricochet')) {
+        // Nudge a wall impact toward the incoming ray so the bounce starts outside its face.
+        const origin = end.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
+        this.hackManager.onHit(enemy ?? null, damage, { position: origin, kind: 'bullet', ignoreShield }, {
+          enemies: this.director.enemies,
+          damageEnemy: (target, amount, bypass) => this.director.damageEnemy(target, amount, bypass),
+          canHit: (a, b) => this.clearShot(a, b),
+          arc: (a, b) => this.addTracer(a, b, 0xffd319, w.tracerWidth),
+        })
       }
     } else {
       end = this.raycaster.ray.at(160, new THREE.Vector3())
@@ -755,6 +827,22 @@ export class GameEngine implements CombatHost {
     mesh.quaternion.setFromUnitVectors(this.tmpA.set(0, 1, 0), dir.normalize())
     this.scene.add(mesh)
     this.tracers.push({ mesh, life: 0.07 })
+  }
+
+  private clearShot(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    const direction = to.clone().sub(from)
+    const distance = direction.length()
+    if (distance < 0.001) return true
+    for (const object of this.env.collidables) object.updateWorldMatrix(true, false)
+    const ray = new THREE.Raycaster(from, direction.divideScalar(distance), 0, distance)
+    return ray.intersectObjects(this.env.collidables, false).length === 0
+  }
+
+  private electricArc(from: THREE.Vector3, to: THREE.Vector3) {
+    const bend = from.clone().lerp(to, 0.5).add(new THREE.Vector3(0.4, 0.65, -0.3))
+    this.addTracer(from, bend, 0x00f0ff, 0.035)
+    this.addTracer(bend, to, 0x00f0ff, 0.035)
+    this.particles.burst(to, SPARK_COLOR, 8, 5, 0.3)
   }
 
   // ---------- terrain helpers ----------
@@ -796,7 +884,7 @@ export class GameEngine implements CombatHost {
     this.scene.add(parts.group)
     this.pickups.push({
       parts,
-      born: this.clock.elapsedTime,
+      born: this.gameplayTime,
       baseY: parts.group.position.y,
       cacheIndex,
       healAmount,
@@ -820,6 +908,7 @@ export class GameEngine implements CombatHost {
   }
 
   private requestLock() {
+    if (this.draftHacks.length > 0) return
     const el = this.renderer.domElement
     const result = el.requestPointerLock() as unknown
     if (result && typeof (result as Promise<void>).catch === 'function') {
@@ -843,12 +932,12 @@ export class GameEngine implements CombatHost {
       kind,
       x: (v.x + 1) / 2,
       y: (-v.y + 1) / 2,
-      born: this.clock.elapsedTime,
+      born: this.gameplayTime,
     })
   }
 
   private emit(force = false) {
-    const t = this.clock.elapsedTime
+    const t = this.gameplayTime
     const alivePopups = this.popups.filter((p) => t - p.born < 1.4)
     this.popups = alivePopups
     const snap: HudState = {
@@ -877,6 +966,9 @@ export class GameEngine implements CombatHost {
       overchargeFrac: Math.max(0, Math.min(1, this.overchargeT / OVERCHARGE_TIME)),
       slideFrac: this.slideCd <= 0 ? 1 : 1 - this.slideCd / SLIDE_CD,
       abilities: this.abilities.stats(),
+      draftOpen: this.draftHacks.length > 0,
+      draftHacks: [...this.draftHacks],
+      activeHacks: this.hackManager.list(),
     }
     const key = JSON.stringify(snap)
     if (force || key !== this.lastEmit) {
@@ -893,6 +985,9 @@ export class GameEngine implements CombatHost {
   }
 
   private resetRun() {
+    this.hackManager.reset()
+    this.draftHacks = []
+    this.gameplayTime = 0
     this.abilities.reset()
     this.gloryKills.reset()
     this.director.reset()
@@ -922,6 +1017,8 @@ export class GameEngine implements CombatHost {
     this.bestCombo = 0
     this.lastMult = 1
     this.health = 100
+    this.lastHitAt = -99
+    this.popups = []
     this.weapon = 'rifle'
     this.ammo = { rifle: WEAPONS.rifle.mag, deagle: WEAPONS.deagle.mag }
     this.reloading = false
@@ -968,7 +1065,10 @@ export class GameEngine implements CombatHost {
   // ---------- per-frame ----------
 
   private update(dtRaw: number, elapsed = dtRaw) {
-    const t = this.clock.elapsedTime
+    if (this.status !== 'playing') return
+    this.gameplayTime += elapsed
+    const t = this.gameplayTime
+    this.hackManager.update(elapsed)
 
     // slow-mo recovery (raw time)
     this.timescale += (1 - this.timescale) * Math.min(1, dtRaw * 1.6)
@@ -1000,6 +1100,7 @@ export class GameEngine implements CombatHost {
     this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
     this.gloryKills.update(elapsed, t)
     this.abilities.update(dtRaw, t)
+    if (this.draftHacks.length > 0) return
     const sprintKey = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
     if (!dashing && this.slideT > 0) {
       this.slideT -= dtRaw
@@ -1025,7 +1126,7 @@ export class GameEngine implements CombatHost {
       let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0)
       let iz = (this.keys.has('KeyS') ? 1 : 0) - (this.keys.has('KeyW') ? 1 : 0)
       const moving = ix !== 0 || iz !== 0
-      const speed = sprintKey ? SPRINT : WALK
+      const speed = (sprintKey ? SPRINT : WALK) * this.hackManager.speedMultiplier
       if (moving) {
         const len = Math.hypot(ix, iz)
         ix /= len
@@ -1037,6 +1138,7 @@ export class GameEngine implements CombatHost {
         this.bobT += dt * (sprintKey ? 13 : 9)
       }
     }
+    if (this.draftHacks.length > 0) return
     // Soft world bounds
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -60, 60)
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 400)
@@ -1065,6 +1167,7 @@ export class GameEngine implements CombatHost {
     }
     this.pos.y = y
     if (this.grounded) this.abilities.onLanding()
+    if (this.draftHacks.length > 0) return
 
     // Jump pads
     if (this.grounded) {
@@ -1169,7 +1272,9 @@ export class GameEngine implements CombatHost {
     }
 
     // Waves / enemies
+    if (this.draftHacks.length > 0) return
     this.director.update(dt, t)
+    if (this.draftHacks.length > 0) return
 
     // Pickups
     for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1267,8 +1372,8 @@ export class GameEngine implements CombatHost {
     this.frameTimes.push(rawDelta * 1000)
     if (this.frameTimes.length > 120) this.frameTimes.shift()
     const dt = Math.min(rawDelta, 0.05)
-    const t = this.clock.elapsedTime
-    this.env.update(t)
+    const t = this.status === 'menu' ? this.clock.elapsedTime : this.gameplayTime
+    if (this.draftHacks.length === 0) this.env.update(t)
 
     // Continuous music: intensity follows game state (muffled ↔ full lead)
     const desired =

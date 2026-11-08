@@ -90,6 +90,11 @@ export class Sfx {
 
   // ---- player weapons ----
 
+  gloryPing() {
+    this.tone(880, 0.12, 0.16, 'triangle', 1760)
+    this.tone(1760, 0.08, 0.08, 'square', 2200)
+  }
+
   shoot() {
     this.tone(920, 0.13, 0.28, 'sawtooth', 120)
     this.tone(1840, 0.09, 0.1, 'square', 240)

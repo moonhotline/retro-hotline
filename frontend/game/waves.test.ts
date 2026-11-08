@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WaveDirector, type CombatHost } from './waves'
 import type { Particles } from './effects'
 import type { Sfx } from './audio'
+import { HackManager, NEON_HACKS } from './combat/modifiers'
 
 beforeEach(() => vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null))
 afterEach(() => vi.restoreAllMocks())
@@ -98,5 +99,67 @@ describe('WaveDirector enemy lifecycle', () => {
     const n = d.enemies.length
     for (const e of [...d.enemies]) d.damageEnemy(e, 999, true)
     expect(spy).toHaveBeenCalledTimes(n)
+  })
+})
+
+describe('wave drafts', () => {
+  function setup() {
+    const { host } = makeHost()
+    host.hackManager = new HackManager()
+    host.onWaveDraft = vi.fn()
+    const director = new WaveDirector(host)
+    director['beginWave'](1)
+    director['queue'] = []
+    director['spawnEnemy']('gunner')
+    return { host, director, enemy: director.enemies[0]! }
+  }
+
+  it('offers one unowned draft after the final kill and blocks the next wave until resumed', () => {
+    const { host, director, enemy } = setup()
+    host.hackManager!.apply('ricochet')
+    director.damageEnemy(enemy, 999, true)
+    expect(host.onWaveDraft).toHaveBeenCalledOnce()
+    const cards = vi.mocked(host.onWaveDraft!).mock.calls[0]![0]
+    expect(cards).toHaveLength(3)
+    expect(cards.some((hack) => hack.id === 'ricochet')).toBe(false)
+    expect(director.draftPending).toBe(true)
+    director.update(60, 60)
+    expect(director.wave).toBe(1)
+    expect(director.intermission).toBe(3.2)
+    director.damageEnemy(enemy, 999, true)
+    expect(host.onWaveDraft).toHaveBeenCalledOnce()
+    director.resumeAfterDraft()
+    director.update(3.3, 63.3)
+    expect(director.wave).toBe(2)
+    director.reset()
+  })
+
+  it('waits for queued enemies as well as living enemies', () => {
+    const { host, director, enemy } = setup()
+    director['queue'] = ['gunner']
+    director.damageEnemy(enemy, 999, true)
+    expect(host.onWaveDraft).not.toHaveBeenCalled()
+    expect(director.draftPending).toBe(false)
+    director.reset()
+  })
+
+  it('continues automatically when the player already owns all six hacks', () => {
+    const { host, director, enemy } = setup()
+    for (const hack of NEON_HACKS) host.hackManager!.apply(hack.id)
+    director.damageEnemy(enemy, 999, true)
+    expect(host.onWaveDraft).toHaveBeenCalledExactlyOnceWith([])
+    expect(director.draftPending).toBe(false)
+    director.update(3.3, 3.3)
+    expect(director.wave).toBe(2)
+    director.reset()
+  })
+
+  it('reset discards the pending draft and restores the initial wave delay', () => {
+    const { director, enemy } = setup()
+    director.damageEnemy(enemy, 999, true)
+    director.reset()
+    expect(director.draftPending).toBe(false)
+    expect(director.wave).toBe(0)
+    expect(director.intermission).toBe(2.2)
   })
 })

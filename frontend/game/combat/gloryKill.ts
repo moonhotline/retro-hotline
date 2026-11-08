@@ -47,7 +47,8 @@ export class GloryKillSystem {
     const toEnemy = new THREE.Vector3()
     let target: Enemy | null = null
     let destination: THREE.Vector3 | null = null
-    let nearest = RANGE + 0.001
+    const range = host.hackManager?.gloryKillRange(RANGE) ?? RANGE
+    let nearest = range + 0.001
     const collidables = host.collidables()
     for (const object of collidables) object.updateWorldMatrix(true, false)
 
@@ -55,7 +56,7 @@ export class GloryKillSystem {
       if (enemy.hp <= 0 || enemy.staggerTimer <= 0 || !this.director.enemies.includes(enemy)) continue
       toEnemy.subVectors(enemy.parts.group.position, playerPos)
       const distance = toEnemy.length()
-      if (distance > RANGE || distance >= nearest || distance < 0.001) continue
+      if (distance > range || distance >= nearest || distance < 0.001) continue
       toEnemy.divideScalar(distance)
       if (toEnemy.dot(forward) <= 0.6 + Number.EPSILON) continue
       this.raycaster.set(playerPos, toEnemy)
