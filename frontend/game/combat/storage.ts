@@ -9,12 +9,13 @@ export interface PlayerProfile {
   unlockedHacks: HackId[]
   sfxVolume: number // 0..1
   musicVolume: number // 0..1
+  musicTrackIndex: number // 0..2
 }
 
 export const PROFILE_STORAGE_KEY = 'retro-hotline.profile.v1'
 export const DEFAULT_PROFILE: Readonly<PlayerProfile> = Object.freeze({
   highScore: 0, maxWave: 0, maxCombo: 0, totalKills: 0, totalGloryKills: 0,
-  unlockedHacks: [], sfxVolume: 0.7, musicVolume: 0.6,
+  unlockedHacks: [], sfxVolume: 0.7, musicVolume: 0.6, musicTrackIndex: 0,
 })
 Object.freeze(DEFAULT_PROFILE.unlockedHacks)
 
@@ -31,6 +32,10 @@ function normalize(value: unknown, base: Readonly<PlayerProfile> = DEFAULT_PROFI
   for (const key of ['sfxVolume', 'musicVolume'] as const) {
     const volume = fields[key]
     if (typeof volume === 'number' && Number.isFinite(volume)) profile[key] = Math.max(0, Math.min(1, volume))
+  }
+  const track = fields.musicTrackIndex
+  if (typeof track === 'number' && Number.isInteger(track) && track >= 0 && track < 3) {
+    profile.musicTrackIndex = track
   }
   if (Array.isArray(fields.unlockedHacks)) {
     profile.unlockedHacks = [...new Set(fields.unlockedHacks.filter(

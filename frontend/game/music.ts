@@ -8,10 +8,21 @@
 
 type Intensity = 0 | 1 | 2 | 3
 
-export const MUSIC_CREDIT = 'Original Dark Synthwave — generated live with WebAudio'
+export const MUSIC_CREDIT = 'Original Cyberpunk Synth Tracks — generated live with WebAudio'
 
-const BPM = 116
-const STEP16 = 60 / BPM / 4
+export interface SynthTrackInfo {
+  id: string
+  name: string
+  genre: string
+  bpm: number
+}
+
+export interface SynthTrack extends SynthTrackInfo {
+  progA: ReadonlyArray<readonly [number, number, number, number]>
+  progB: ReadonlyArray<readonly [number, number, number, number]>
+  lead: ReadonlyArray<ReadonlyArray<number>>
+  rhythm: 'synthwave' | 'industrial' | 'breakbeat'
+}
 
 // Two 4-bar sections: A (Am Am F G) and B (Am Am F E) for a darker pull.
 const PROG_A: ReadonlyArray<readonly [number, number, number, number]> = [
@@ -35,6 +46,49 @@ const LEAD: ReadonlyArray<ReadonlyArray<number>> = [
   [-1, 2, -1, -1, 3, -1, 2, -1, -1, 1, -1, 0, -1, -1, -1, -1],
 ]
 
+export const SYNTH_TRACKS: ReadonlyArray<Readonly<SynthTrack>> = [
+  {
+    id: 'bay-bridge-runner', name: 'BAY BRIDGE RUNNER', genre: 'Synthwave', bpm: 116,
+    progA: PROG_A, progB: PROG_B, lead: LEAD, rhythm: 'synthwave',
+  },
+  {
+    id: 'hotline-midnight', name: 'HOTLINE MIDNIGHT', genre: 'Darksynth / EBM', bpm: 128,
+    progA: [
+      [73.42, 87.31, 110.0, 146.83], [58.27, 73.42, 87.31, 116.54],
+      [49.00, 58.27, 73.42, 98.00], [55.00, 69.30, 82.41, 110.00],
+    ],
+    progB: [
+      [73.42, 87.31, 110.0, 146.83], [58.27, 73.42, 87.31, 116.54],
+      [49.00, 58.27, 73.42, 98.00], [69.30, 87.31, 103.83, 138.59],
+    ],
+    lead: [
+      [0, -1, 0, 3, -1, 2, 0, -1, 0, 1, -1, 3, 2, -1, 1, 0],
+      [0, 0, -1, 2, -1, 3, 2, -1, 1, -1, 0, 3, -1, 2, 1, -1],
+      [3, -1, 2, 0, 1, -1, 0, -1, 3, 2, -1, 1, 0, -1, 2, 3],
+      [0, -1, 1, 2, 3, -1, 2, 1, 0, 0, -1, 3, 2, 1, 0, -1],
+    ],
+    rhythm: 'industrial',
+  },
+  {
+    id: 'cyber-overdrive', name: 'CYBER OVERDRIVE', genre: 'Acid Breakbeat / Neuro', bpm: 140,
+    progA: [
+      [82.41, 98.00, 123.47, 164.81], [65.41, 82.41, 98.00, 130.81],
+      [49.00, 61.74, 73.42, 98.00], [73.42, 92.50, 110.00, 146.83],
+    ],
+    progB: [
+      [82.41, 98.00, 123.47, 164.81], [65.41, 82.41, 98.00, 130.81],
+      [55.00, 65.41, 82.41, 110.00], [61.74, 77.78, 92.50, 123.47],
+    ],
+    lead: [
+      [0, 1, 2, -1, 3, 2, 1, 2, 3, -1, 2, 3, 1, 2, 0, -1],
+      [2, 3, -1, 2, 1, 2, 3, -1, 0, 1, 2, 3, 2, -1, 1, 3],
+      [3, 2, 1, 0, -1, 1, 2, 3, 2, 3, -1, 2, 1, 0, 1, 2],
+      [1, 2, 3, -1, 2, 1, 0, 1, 2, -1, 3, 2, 3, 1, 2, 3],
+    ],
+    rhythm: 'breakbeat',
+  },
+]
+
 const FILTER_CUT: ReadonlyArray<number> = [420, 900, 2600, 6500]
 
 type Stem = 'pad' | 'drum' | 'bass' | 'arp' | 'lead'
@@ -54,6 +108,8 @@ export class SynthMusic {
   private timer = 0
   private step = 0
   private nextT = 0
+  private currentTrackIndex = 0
+  private step16 = 60 / SYNTH_TRACKS[0]!.bpm / 4
   private intensity: Intensity = 0
   private combo = 0
   private volume = 0.6
@@ -62,6 +118,33 @@ export class SynthMusic {
   private disposed = false
   private filterDropUntil = 0
   private filterDropHz = 360
+
+  getTracks(): SynthTrackInfo[] {
+    return SYNTH_TRACKS.map(({ id, name, genre, bpm }) => ({ id, name, genre, bpm }))
+  }
+
+  getCurrentTrack(): SynthTrackInfo {
+    const { id, name, genre, bpm } = SYNTH_TRACKS[this.currentTrackIndex]!
+    return { id, name, genre, bpm }
+  }
+
+  getCurrentTrackIndex(): number {
+    return this.currentTrackIndex
+  }
+
+  setTrack(index: number): void {
+    if (!Number.isFinite(index)) return
+    const length = SYNTH_TRACKS.length
+    this.currentTrackIndex = ((Math.trunc(index) % length) + length) % length
+    this.step16 = 60 / SYNTH_TRACKS[this.currentTrackIndex]!.bpm / 4
+    // Keep the next unscheduled beat and musical phase intact. Already queued
+    // voices finish naturally; subsequent beats use the new tempo on this clock.
+  }
+
+  nextTrack(): SynthTrackInfo {
+    this.setTrack(this.currentTrackIndex + 1)
+    return this.getCurrentTrack()
+  }
 
   /** Must be called from a user gesture (start button). */
   start() {
@@ -171,7 +254,9 @@ export class SynthMusic {
   }
 
   debugState() {
+    const currentTrack = this.getCurrentTrack()
     return {
+      trackIndex: this.currentTrackIndex, trackName: currentTrack.name, bpm: currentTrack.bpm,
       ctx: this.ctx?.state ?? 'none', step: this.step, nextTime: this.nextT,
       intensity: this.intensity, combo: this.combo,
       rank: this.combo >= 10 ? 'ULTRA' : this.combo >= 5 ? 'S' : this.combo >= 3 ? 'B' : this.combo >= 2 ? 'C' : 'D',
@@ -240,14 +325,14 @@ export class SynthMusic {
     // A background tab can miss whole bars. Skip stale beats without resetting phase
     // or scheduling hundreds of voices at once in the past.
     if (this.nextT < this.ctx.currentTime) {
-      const missed = Math.ceil((this.ctx.currentTime - this.nextT) / STEP16)
+      const missed = Math.ceil((this.ctx.currentTime - this.nextT) / this.step16)
       this.step += missed
-      this.nextT += missed * STEP16
+      this.nextT += missed * this.step16
     }
     while (this.nextT < this.ctx.currentTime + 0.16) {
       this.playStep(this.step, this.nextT)
       this.step++
-      this.nextT += STEP16
+      this.nextT += this.step16
     }
   }
 
@@ -282,12 +367,12 @@ export class SynthMusic {
     osc.stop(at + dur + 0.05)
   }
 
-  private kick(at: number) {
+  private kick(at: number, industrial = false) {
     if (!this.ctx || !this.drumGain) return
     const osc = this.ctx.createOscillator()
     osc.type = 'sine'
-    osc.frequency.setValueAtTime(160, at)
-    osc.frequency.exponentialRampToValueAtTime(42, at + 0.14)
+    osc.frequency.setValueAtTime(industrial ? 220 : 160, at)
+    osc.frequency.exponentialRampToValueAtTime(industrial ? 38 : 42, at + (industrial ? 0.09 : 0.14))
     const g = this.ctx.createGain()
     g.gain.setValueAtTime(0.7, at)
     g.gain.exponentialRampToValueAtTime(0.001, at + 0.22)
@@ -295,6 +380,7 @@ export class SynthMusic {
     this.track(osc, [g])
     osc.start(at)
     osc.stop(at + 0.26)
+    if (industrial) this.hit(at, 3200, 0.8, 0.08, 0.018)
   }
 
   private hit(at: number, freq: number, q: number, vol: number, dur: number) {
@@ -314,32 +400,74 @@ export class SynthMusic {
     src.stop(at + dur + 0.02)
   }
 
+  private synthBass(freq: number, at: number, acid: boolean, accent: boolean) {
+    if (!this.ctx || !this.bassGain) return
+    const dur = this.step16 * (acid ? 0.9 : 0.6)
+    const osc = this.ctx.createOscillator()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(acid ? freq : freq * 1.8, at)
+    if (!acid) osc.frequency.exponentialRampToValueAtTime(freq, at + 0.025)
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.Q.value = acid ? 9 : 1.5
+    filter.frequency.setValueAtTime(acid ? (accent ? 4200 : 1800) : 1300, at)
+    filter.frequency.exponentialRampToValueAtTime(acid ? 180 : 100, at + dur)
+    const gain = this.ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, at)
+    gain.gain.linearRampToValueAtTime(acid ? (accent ? 0.07 : 0.05) : 0.16, at + 0.003)
+    gain.gain.exponentialRampToValueAtTime(0.001, at + dur)
+    osc.connect(filter).connect(gain).connect(this.bassGain)
+    this.track(osc, [filter, gain])
+    osc.start(at)
+    osc.stop(at + dur + 0.02)
+  }
+
   private playStep(step: number, t: number) {
+    const track = SYNTH_TRACKS[this.currentTrackIndex]!
     const s16 = step % 16
     const bar = Math.floor(step / 16) % 4
     const section = Math.floor(step / 64) % 2
-    const chord = (section === 0 ? PROG_A : PROG_B)[bar]!
+    const chord = (section === 0 ? track.progA : track.progB)[bar]!
 
     // Every stem keeps its musical phase, even while its bus is muted.
-    if (s16 % 4 === 0) this.kick(t)
-    if (s16 === 4 || s16 === 12) this.hit(t, 1900, 1.2, 0.22, 0.09)
-    if (s16 % 2 === 0) this.hit(t, 8200, 1.5, 0.07, 0.03)
-    if (this.combo >= 5 && s16 % 4 === 2) this.hit(t, 8200, 1.5, 0.05, 0.06)
-
-    if (s16 % 2 === 0) {
-      this.voice(this.bassGain, chord[0] / 2 * (s16 % 8 === 6 ? 2 : 1), 0.16, 0.16, 'sawtooth', t)
+    if (track.rhythm === 'synthwave') {
+      if (s16 % 4 === 0) this.kick(t)
+      if (s16 === 4 || s16 === 12) this.hit(t, 1900, 1.2, 0.22, 0.09)
+      if (s16 % 2 === 0) this.hit(t, 8200, 1.5, 0.07, 0.03)
+      if (this.combo >= 5 && s16 % 4 === 2) this.hit(t, 8200, 1.5, 0.05, 0.06)
+      if (s16 % 2 === 0) {
+        this.voice(this.bassGain, chord[0] / 2 * (s16 % 8 === 6 ? 2 : 1), 0.16, 0.16, 'sawtooth', t)
+      }
+    } else if (track.rhythm === 'industrial') {
+      if (s16 % 4 === 0) this.kick(t, true)
+      if (s16 === 4 || s16 === 12) {
+        this.hit(t, 2400, 3.5, 0.2, 0.1)
+        this.hit(t + 0.012, 4200, 5, 0.1, 0.055)
+        this.voice(this.drumGain, 185, 0.06, 0.07, 'triangle', t)
+      }
+      if (s16 % 4 >= 2) this.hit(t, 9600, 2, s16 % 2 === 0 ? 0.07 : 0.04, 0.025)
+      if (s16 % 8 !== 4 && s16 % 8 !== 7) {
+        this.synthBass(chord[0] * (s16 % 8 === 3 ? 2 : 1), t, false, false)
+      }
+    } else {
+      if (s16 === 0 || s16 === 6 || s16 === 10) this.kick(t)
+      if (s16 === 4 || s16 === 12) this.hit(t, 2600, 1.8, 0.2, 0.065)
+      this.hit(t, 8800, 1.5, s16 % 2 === 0 ? 0.055 : 0.025, 0.02)
+      const tone = s16 % 4 === 3 ? chord[2] : chord[0]
+      this.synthBass(tone * (s16 % 8 === 6 ? 2 : 1), t, true, s16 % 4 === 2)
     }
     if (s16 === 0) {
-      for (const f of chord) this.voice(this.padGain, f, 2.1, 0.04, 'sawtooth', t, 0.5)
+      for (const f of chord) this.voice(this.padGain, f, this.step16 * 16 + 0.03, 0.04, 'sawtooth', t, 0.5)
     }
     const arpF = chord[(step * 3) % 4]! * (s16 % 8 < 4 ? 2 : 4)
     this.voice(this.arpGain, arpF, 0.07, 0.05, 'square', t)
 
-    const idx = LEAD[bar]![s16] ?? -1
+    const idx = track.lead[bar]![s16] ?? -1
     if (idx >= 0) {
-      const f = chord[idx]!
-      this.voice(this.leadGain, f * 2, 0.16, 0.07, 'sawtooth', t, 0.008, -6)
-      this.voice(this.leadGain, f * 2, 0.16, 0.05, 'sawtooth', t, 0.008, 6)
+      const f = chord[idx]! * (track.rhythm === 'breakbeat' ? 4 : 2)
+      const dur = track.rhythm === 'synthwave' ? 0.16 : this.step16 * 0.9
+      this.voice(this.leadGain, f, dur, 0.07, 'sawtooth', t, 0.008, -6)
+      this.voice(this.leadGain, f, dur, 0.05, 'sawtooth', t, 0.008, 6)
     }
   }
 }

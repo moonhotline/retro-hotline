@@ -19,7 +19,7 @@ import { WaveDirector, type CombatHost, type Enemy, type Projectile } from './wa
 import { GLORY_KILL_BANNER, GloryKillSystem } from './combat/gloryKill'
 import { AbilitySystem } from './combat/abilities'
 import { HackManager, type HackId, type NeonHack } from './combat/modifiers'
-import { loadProfile, recordGameRun } from './combat/storage'
+import { loadProfile, recordGameRun, saveProfile } from './combat/storage'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -176,6 +176,7 @@ export class GameEngine implements CombatHost {
     this.container = container
     this.onHud = onHud
     const profile = loadProfile()
+    this.music.setTrack(profile.musicTrackIndex)
     this.music.setVolume(profile.musicVolume)
     this.sfx.setVolume(profile.sfxVolume)
 
@@ -636,6 +637,17 @@ export class GameEngine implements CombatHost {
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.draftHacks.length > 0) return
+    if (e.isComposing || (e.target instanceof Element &&
+      e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))) return
+    if (e.code === 'KeyN') {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+      e.preventDefault()
+      const next = this.music.nextTrack()
+      saveProfile({ musicTrackIndex: this.music.getCurrentTrackIndex() })
+      this.setBanner(`TRACK // ${next.name} [${next.bpm} BPM]`)
+      this.emit(true)
+      return
+    }
     if (e.code === 'Space') e.preventDefault()
     if (e.code === 'KeyM') {
       this.toggleMute()
@@ -985,6 +997,7 @@ export class GameEngine implements CombatHost {
       bannerId: this.bannerId,
       popups: alivePopups.map((p) => ({ id: p.id, text: p.text, kind: p.kind, x: p.x, y: p.y })),
       muted: this.muted,
+      musicTrackName: this.music.getCurrentTrack().name,
       weapon: this.weapon,
       overchargeFrac: Math.max(0, Math.min(1, this.overchargeT / OVERCHARGE_TIME)),
       slideFrac: this.slideCd <= 0 ? 1 : 1 - this.slideCd / SLIDE_CD,
