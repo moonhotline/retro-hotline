@@ -248,7 +248,54 @@ Repository: `https://github.com/moonhotline/retro-hotline.git`
 | **Round 2** | Glory Kill Loop | Stagger state, dash-snap lerp, hitstop, geometric shatter, HP/ammo drops | 9.45 |
 | **Round 3** | Cyber-Abilities | Phase Dash (38 m/s), Pulse Parry (reflect), Kinetic Slam (AOE stun) | 9.57 |
 | **Round 4** | Neon Hack Roguelite | Post-wave CRT terminal, 6 game-changing traits, HUD badges | 9.70 |
-| **Round 5** | 3D Vertical Arena & Multi-Track WebAudio | Elevated catwalks, jump pads, 3 procedural WebAudio tracks (116/128/140 BPM), 5-stem dynamic audio, persistent profile | **9.86** |
+| **Round 5** | 3D Vertical Arena & Multi-Track WebAudio | Elevated catwalks, jump pads, 3 procedural WebAudio tracks (116/128/140 BPM), 5-stem dynamic audio, persistent profile | 9.86 |
+| **Round 6** | Silicon Valley Arena & Impeccable UI Taste | Silicon Valley Quantum Campus (z=380..680), Quantum Vault (top: 9.5m), 90ms continuous rifle cadence, keyboard-only V/G, modular PS5 ConsoleMenu | **9.92** |
+
+---
+
+## 9. Round 6 Evolution: Silicon Valley Tech District, Machine Gun Overhaul & Impeccable UI Taste Redesign
+
+### 9.1 Architectural Implementation
+1. **Control Decoupling & Mouse Listener Elimination**:
+   - Confirmed V (Pulse Parry) and G (Kinetic Slam) are strictly bound to dedicated keyboard triggers (`KeyV` / `KeyG`).
+   - Removed conflicting `KeyC` check from kinetic slam trigger, restoring `C` / `LeftControl` strictly to high-speed tactical sliding.
+   - Completely verified that mouse buttons (button 0 = shoot, button 2 = punch/glory kill) have zero listeners or triggers for V or G abilities.
+
+2. **Machine Gun Full-Auto Cadence & Recoil Restoration**:
+   - Tuned `WEAPONS.rifle`: fire cadence tightened to **90ms (11.1 shots/s)**, damage set to 1.2, recoil per shot tightened to 0.007.
+   - Implemented sub-frame accumulator in `engine.ts` fire loop: holding LMB smoothly advances the weapon cycle without losing fractional delta time between frame ticks.
+   - Recoil ceiling capped at 0.045 rad (~2.5 degrees), paired with accelerated recovery (`dt * 1.8`) and snappy kick spring-back (`dt * 4.5`), restoring an aggressive, laser-tight full-auto spray feel.
+   - Cleaned `sfx.shoot()` transient envelope to eliminate phase cancellation during sustained high-frequency fire.
+
+3. **Silicon Valley Tech District Map Expansion (`map.ts`)**:
+   - Extended procedural arena beyond the Golden Gate / Bay Bridge span into the **Silicon Valley Cyber Campus** (`z = 380 .. 680`, `x = -45 .. 45`):
+     - **Palo Alto Data Monoliths**: Server cluster towers with glowing cyan (`0x00f0ff`) and matrix green (`0x39ff14`) data traces.
+     - **Sand Hill Quantum Vault**: High-ground server facility with walkable elevated mezzanine at `top: 9.5m` (`x0: -18, x1: 18, z0: 480, z1: 560`).
+     - **Catapult Launch Pad**: Catapult pad positioned at `(0, 0.6, 420)` boosting players directly onto the Quantum Vault.
+     - **Dynamic District HUD**: Tracks player zone in real-time (`BAY BRIDGE // TRANSIT SPAN` → `NORTH GATE // LOGISTICS HUB` → `SILICON VALLEY // QUANTUM CAMPUS`).
+
+4. **Impeccable PS5 Console Hub Redesign (`ConsoleMenu.tsx` & `.css`)**:
+   - Rebuilt standby and landing dashboard with obsidian visual depth (`#05070e`), drifting laser ribbons, and high-fashion cyber typography.
+   - DualSense™ live connection telemetry, interactive audio track selector (`[N]` hotkey), and categorized controls dialog.
+   - 100% SVG vector paths and PlayStation glyphs (`✕`, `○`, `△`, `◻︎`) with zero emojis.
+   - Full WCAG 2.1 AA accessibility compliance and zero horizontal overflow on mobile screens (390px).
+
+### 9.2 Verification Matrix
+- **Vitest Unit Test Suite**: **202 / 202 tests passed** across 9 test files in 3.08s.
+  - `engine.test.ts` (52 tests) - Continuous full-auto rifle fire, V/G keyboard isolation, C slide isolation, district tracking.
+  - `map.test.ts` (8 tests) - Silicon Valley campus walk rects, Quantum Vault slab collision, 5 jump pads, spawn points.
+  - `storage.test.ts` (28 tests) - Profile records, track persistence, volume settings.
+  - `music.test.ts` (25 tests) - 3 procedural tracks, 5 stems, monotonic lookahead scheduling.
+  - `abilities.test.ts` (31 tests) - Dash, Parry, Slam mechanics and slice executions.
+  - `modifiers.test.ts` (23 tests) - Roguelite hack traits and stackable modifiers.
+  - `gloryKill.test.ts` (17 tests) - Stagger threshold, camera lerp, resource drops.
+  - `waves.test.ts` (9 tests) - Enemy lifecycle and cleanup.
+  - `hackTerminal.test.ts` (9 tests) - CRT terminal draft UI.
+- **TypeScript Strict Validation**: `tsc --noEmit -p frontend` → **0 errors**.
+- **Production Build**: `vite build` completed cleanly in 1.15s.
+- **Vercel Production Deployment**: Live at `https://retro.oodai.space` (`https://retro-hotline.vercel.app`).
+- **Production Playtest (`tools/playtest.mjs`)**: **30 / 30 checks passed, 0 errors, stable 60.0 FPS, 0 leaked scene objects**.
+
 
 
 
