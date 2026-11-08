@@ -45,7 +45,7 @@ export function makeGlowSprite(color: number, scale: number, opacity = 0.9): THR
 }
 
 /** Circle/regular-polygon outline as a LineLoop — the "vector arcade" primitive. */
-function circleLine(r: number, color: number, seg = 40, opacity = 1): THREE.LineLoop {
+export function circleLine(r: number, color: number, seg = 40, opacity = 1): THREE.LineLoop {
   const pts: THREE.Vector3[] = []
   for (let i = 0; i < seg; i++) {
     const a = (i / seg) * Math.PI * 2
@@ -135,15 +135,32 @@ export const WEAPONS: Record<WeaponId, WeaponStats> = {
     tracerWidth: 0.06,
     flash: 1.5,
   },
+  sniper: {
+    name: 'GAUSS SNIPER',
+    label: 'GAUSS SNIPER',
+    mag: 5,
+    fireCd: 0.95,
+    dmg: 24,
+    auto: false,
+    reloadTime: 2.0,
+    recoil: 0.08,
+    kick: 0.6,
+    shake: 0.45,
+    critChance: 0.5,
+    tracer: 0xff0055,
+    tracerWidth: 0.12,
+    flash: 2.0,
+  },
 }
 
 export interface GunRig {
   rifle: THREE.Group
   deagle: THREE.Group
+  sniper: THREE.Group
   flash: THREE.Sprite
 }
 
-/** Two neon-outline viewmodel weapons attached to the camera. */
+/** Three neon-outline viewmodel weapons attached to the camera. */
 export function buildGun(camera: THREE.PerspectiveCamera): GunRig {
   const rifle = new THREE.Group()
   const body = edgeBox(0.14, 0.18, 0.66, 0x00f0ff)
@@ -174,12 +191,27 @@ export function buildGun(camera: THREE.PerspectiveCamera): GunRig {
   deagle.visible = false
   camera.add(deagle)
 
+  const sniper = new THREE.Group()
+  const sniperBody = edgeBox(0.12, 0.16, 0.85, 0xff2975)
+  const sniperBarrel = edgeBox(0.06, 0.06, 1.05, 0x00f0ff)
+  sniperBarrel.position.set(0, 0.04, -0.9)
+  const sniperScope = edgeBox(0.08, 0.1, 0.35, 0xffd319)
+  sniperScope.position.set(0, 0.15, -0.15)
+  const sniperGrip = edgeBox(0.1, 0.28, 0.16, 0x8a2be2)
+  sniperGrip.position.set(0, -0.22, 0.25)
+  sniperGrip.rotation.x = 0.25
+  sniper.add(sniperBody, sniperBarrel, sniperScope, sniperGrip)
+  sniper.position.set(0.52, -0.42, -0.95)
+  sniper.rotation.y = 0.05
+  sniper.visible = false
+  camera.add(sniper)
+
   const flash = makeGlowSprite(0x9ffcff, 0.7, 1)
   flash.position.set(0.52, -0.28, -1.5)
   flash.visible = false
   camera.add(flash)
 
-  return { rifle, deagle, flash }
+  return { rifle, deagle, sniper, flash }
 }
 
 export interface DroneStats {

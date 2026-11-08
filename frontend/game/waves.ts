@@ -457,6 +457,13 @@ export class WaveDirector {
     this.projectiles.splice(i, 1)
   }
 
+  queueRoomWave(drones: DroneType[], waveNum?: number) {
+    if (waveNum !== undefined) this.wave = waveNum
+    this.queue.push(...drones)
+    this.spawnTimer = 0.4
+    this.host.onWaveStart(this.wave)
+  }
+
   private beginWave(n: number) {
     this.wave = n
     this.queue = this.buildQueue(n)
@@ -489,7 +496,7 @@ export class WaveDirector {
     return q
   }
 
-  private spawnEnemy(type: DroneType) {
+  spawnEnemy(type: DroneType): Enemy {
     const st = DRONE_STATS[type]
     const parts = makeDrone(type)
     const pos = this.host.spawnPoint()
@@ -527,6 +534,7 @@ export class WaveDirector {
     // Spawn audio cues
     if (type === 'brawler') this.host.sfx.screech(this.host.sfxPan(pos))
     if (type === 'boss') this.host.sfx.roar(this.host.sfxPan(pos))
+    return enemy
   }
 
   explodeEnemy(enemy: Enemy, byPlayer: boolean) {

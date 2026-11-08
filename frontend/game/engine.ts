@@ -20,6 +20,7 @@ import { GLORY_KILL_BANNER, GloryKillSystem } from './combat/gloryKill'
 import { AbilitySystem } from './combat/abilities'
 import { HackManager, type HackId, type NeonHack } from './combat/modifiers'
 import { loadProfile, recordGameRun, saveProfile } from './combat/storage'
+import { LevelManager } from './levels/manager'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -87,6 +88,9 @@ export class GameEngine implements CombatHost {
   private gloryKills: GloryKillSystem
   private abilities: AbilitySystem
   readonly hackManager = new HackManager()
+  readonly levelManager = new LevelManager()
+  chronoTimeScale = 1.0
+  chronoMode = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test' ? false : true
   private draftHacks: NeonHack[] = []
   private gameplayTime = 0
   private raycaster = new THREE.Raycaster()
@@ -116,7 +120,14 @@ export class GameEngine implements CombatHost {
 
   // Weapons
   private weapon: WeaponId = 'rifle'
-  private ammo: Record<WeaponId, number> = { rifle: WEAPONS.rifle.mag, deagle: WEAPONS.deagle.mag }
+  private ammo: Record<WeaponId, number> = {
+    rifle: WEAPONS.rifle.mag,
+    deagle: WEAPONS.deagle.mag,
+    sniper: WEAPONS.sniper.mag,
+  }
+  unlockedWeapons: WeaponId[] = ['rifle', 'deagle']
+  isAiming = false
+  attackSpeedMult = 1.0
   private firing = false
   private triggerQueued = false
   private fireCd = 0
@@ -215,6 +226,7 @@ export class GameEngine implements CombatHost {
     this.director = new WaveDirector(this)
     this.gloryKills = new GloryKillSystem(this.director, this)
     this.abilities = new AbilitySystem(this.director, this)
+    this.levelManager.bindScene(this.scene, this.sfx)
 
     window.addEventListener('resize', this.onResize)
     document.addEventListener('pointerlockchange', this.onLockChange)
@@ -226,6 +238,7 @@ export class GameEngine implements CombatHost {
     window.addEventListener('keyup', this.onKeyUp)
     window.addEventListener('blur', this.clearInput)
     this.container.addEventListener('click', this.onContainerClick)
+    this.container.addEventListener('contextmenu', this.onContextMenu)
 
     this.animate()
     this.emit(true)
@@ -268,6 +281,9 @@ export class GameEngine implements CombatHost {
       combo: this.combo,
       weapon: this.weapon,
       ammo: { ...this.ammo },
+      chronoTimeScale: this.chronoTimeScale,
+      stage: this.levelManager.currentStage.name,
+      room: this.levelManager.currentRoom?.roomName,
       reloading: this.reloading,
       slideT: this.slideT,
       punchCd: this.punchCd,
@@ -382,6 +398,63 @@ export class GameEngine implements CombatHost {
     this.start()
   }
 
+  closeStoryDialogue() {
+    const res = this.levelManager.closeDialogue()
+    if (res.action === 'gift_sniper') {
+      if (!this.unlockedWeapons.includes('sniper')) {
+        this.unlockedWeapons.push('sniper')
+      }
+      this.weapon = 'sniper'
+      this.ammo.sniper = WEAPONS.sniper.mag
+      this.isAiming = false
+      this.setBanner('PROTOTYPE ACQUIRED // GAUSS SNIPER (HOLD RMB TO ZOOM)')
+      this.sfx.streak()
+    } else if (res.action === 'trigger_wave') {
+      const room = this.levelManager.currentRoom
+      if (room && room.waves.length > 0 && !this.levelManager.isRoomSpawned(room.roomId)) {
+        this.levelManager.markRoomSpawned(room.roomId)
+        const dronesToQueue: DroneType[] = []
+        for (const w of room.waves) {
+          for (const drone of w.drones) {
+            for (let i = 0; i < drone.count; i++) {
+              dronesToQueue.push(drone.type)
+            }
+          }
+        }
+        this.director.queueRoomWave(dronesToQueue)
+      }
+    }
+    this.requestLock()
+    this.emit(true)
+  }
+
+  buyShopItem(item: import('./types').ShopItemData): boolean {
+    if (this.score < item.cost) {
+      this.pushPopup('INSUFFICIENT SCORE', 'crit', this.pos)
+      return false
+    }
+    this.score -= item.cost
+
+    if (item.kind === 'heal') {
+      this.health = Math.min(this.maxHealth, this.health + 50)
+      this.pushPopup('+50 HP', 'heal', this.pos)
+      this.setBanner('NANO REPAIR INJECTED // +50 HP')
+      this.sfx.pickup()
+    } else if (item.kind === 'attack_speed') {
+      this.attackSpeedMult *= 1.25
+      this.pushPopup('+25% FIRERATE', 'gem', this.pos)
+      this.setBanner('OVERCLOCK TRIGGER INSTALLED // +25% SPEED')
+      this.sfx.pickup()
+    } else if (item.kind === 'ammo') {
+      this.ammo.sniper = Math.min(WEAPONS.sniper.mag * 2, (this.ammo.sniper || 0) + 5)
+      this.pushPopup('+5 SNIPER SLUGS', 'gem', this.pos)
+      this.setBanner('GAUSS SLUGS REFILLED // +5 SLUGS')
+      this.sfx.reload()
+    }
+    this.emit(true)
+    return true
+  }
+
   toggleMute() {
     this.muted = !this.muted
     this.sfx.setMuted(this.muted)
@@ -416,7 +489,9 @@ export class GameEngine implements CombatHost {
     window.removeEventListener('keyup', this.onKeyUp)
     window.removeEventListener('blur', this.clearInput)
     this.container.removeEventListener('click', this.onContainerClick)
+    this.container.removeEventListener('contextmenu', this.onContextMenu)
     this.music.dispose()
+    this.levelManager.dispose()
     this.abilities.reset()
     this.gloryKills.reset()
     this.scene.traverse((obj) => {
@@ -547,6 +622,14 @@ export class GameEngine implements CombatHost {
     this.pushPopup(`+${pts}`, mult >= 2 ? 'crit' : 'score', position)
 
     if (Math.random() < PICKUP_CHANCE) this.spawnPickup(position)
+
+    if (this.director.wave > 0 && this.director.remaining === 0 && this.director.enemies.length <= 1 && this.levelManager.currentRoom && !this.levelManager.isCurrentRoomCleared()) {
+      const room = this.levelManager.currentRoom
+      this.levelManager.onRoomClear(room.roomId)
+      this.setBanner(`ROOM CLEAR // ${room.roomName}`)
+      this.sfx.streak()
+      this.hitstop(0.1, 0.2)
+    }
   }
 
   onGloryKill(position: THREE.Vector3) {
@@ -641,11 +724,16 @@ export class GameEngine implements CombatHost {
     }
   }
 
+  private onContextMenu = (e: MouseEvent) => {
+    e.preventDefault()
+  }
+
   private onMouseMove = (e: MouseEvent) => {
     if (this.status !== 'playing') return
     if (!this.isLocked() && !this.lockFailed) return
-    this.yaw -= e.movementX * 0.0021
-    this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * 0.0021, -1.45, 1.45)
+    const sens = this.isAiming && this.weapon === 'sniper' ? 0.00085 : 0.0021
+    this.yaw -= e.movementX * sens
+    this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * sens, -1.45, 1.45)
   }
 
   private onMouseDown = (e: MouseEvent) => {
@@ -655,22 +743,34 @@ export class GameEngine implements CombatHost {
       this.firing = true
       this.triggerQueued = true
     } else if (e.button === 2) {
-      this.tryPunch()
+      if (this.weapon === 'sniper') {
+        this.isAiming = true
+        this.emit()
+      } else {
+        this.tryPunch()
+      }
     }
   }
 
   private onMouseUp = (e: MouseEvent) => {
     if (e.button === 0) this.firing = false
+    if (e.button === 2) {
+      if (this.isAiming) {
+        this.isAiming = false
+        this.emit()
+      }
+    }
   }
 
   private clearInput = () => {
     this.firing = false
     this.triggerQueued = false
+    this.isAiming = false
     this.keys.clear()
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (this.draftHacks.length > 0) return
+    if (this.draftHacks.length > 0 || this.levelManager.storyModal.open) return
     if (e.isComposing || (e.target instanceof Element &&
       e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))) return
     if (e.code === 'KeyN') {
@@ -701,7 +801,21 @@ export class GameEngine implements CombatHost {
       }
     }
     if (e.code === 'KeyQ') this.switchWeapon()
-    if (e.code === 'KeyE' && !e.repeat) this.tryGloryKill()
+    if (e.code === 'KeyE' && !e.repeat) {
+      if (this.levelManager.activeInteractable) {
+        if (this.levelManager.interact()) {
+          this.firing = false
+          this.triggerQueued = false
+          this.isAiming = false
+          if (document.pointerLockElement) {
+            document.exitPointerLock()
+          }
+          this.emit(true)
+          return
+        }
+      }
+      this.tryGloryKill()
+    }
     if (e.code === 'KeyF') this.tryPunch()
     if (e.code === 'KeyC' || e.code === 'ControlLeft') this.trySlide()
     if (e.code === 'KeyR') this.tryReload()
@@ -719,11 +833,15 @@ export class GameEngine implements CombatHost {
 
   private switchWeapon() {
     if (this.swapT > 0) return
-    this.weapon = this.weapon === 'rifle' ? 'deagle' : 'rifle'
+    const idx = this.unlockedWeapons.indexOf(this.weapon)
+    const nextIdx = (idx + 1) % this.unlockedWeapons.length
+    this.weapon = this.unlockedWeapons[nextIdx] ?? 'rifle'
+    this.isAiming = false
     this.reloading = false
     this.triggerQueued = false
     this.swapT = 0.25
     this.sfx.swap()
+    this.emit()
   }
 
   private tryReload() {
@@ -797,7 +915,7 @@ export class GameEngine implements CombatHost {
   private fire() {
     const w = WEAPONS[this.weapon]
     this.ammo[this.weapon] -= this.hackManager.ammoCost(this.weapon)
-    const baseCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1) * this.hackManager.fireCooldownMultiplier
+    const baseCd = (w.fireCd / this.attackSpeedMult) * (this.overchargeT > 0 ? 0.55 : 1) * this.hackManager.fireCooldownMultiplier
     // Carry the partial frame forward, so held fire keeps its authored cadence.
     this.fireCd = Math.min(baseCd, this.fireCd < 0 ? this.fireCd + baseCd : baseCd)
     this.gunKick = w.kick
@@ -808,6 +926,7 @@ export class GameEngine implements CombatHost {
     const flashScale = w.flash * (this.overchargeT > 0 ? 1.4 : 1) * (0.8 + Math.random() * 0.4)
     this.gunRig.flash.scale.set(flashScale, flashScale, 1)
     if (this.weapon === 'deagle') this.sfx.deagle()
+    else if (this.weapon === 'sniper') this.sfx.sniper()
     else this.sfx.shoot()
 
     // ejected shell casing sparks
@@ -828,21 +947,21 @@ export class GameEngine implements CombatHost {
       end = hit.point
       const enemy = hit.object.userData['enemy'] as Enemy | undefined
       let damage = w.dmg
-      let ignoreShield = this.weapon === 'deagle'
+      let ignoreShield = this.weapon === 'deagle' || this.weapon === 'sniper'
       if (enemy) {
         const crit = Math.random() < w.critChance
         const dmg = w.dmg * (crit ? 2 : 1)
         damage = dmg
         ignoreShield ||= crit
-        // The Eagle punches through armor; the rifle does not
-        const killed = this.director.damageEnemy(enemy, dmg, this.weapon === 'deagle' || crit)
+        // The Eagle and Gauss Sniper punch through armor; the rifle does not
+        const killed = this.director.damageEnemy(enemy, dmg, ignoreShield)
         this.hitMarkerId++
         this.hitMarkerCrit = crit
         if (crit) this.sfx.crit()
         else this.sfx.hit()
         if (!killed) this.particles.burst(end, SPARK_COLOR, crit ? 16 : 9, 7, 0.4)
-        if (killed && this.weapon === 'deagle') {
-          this.timescale = Math.min(this.timescale, 0.55) // magnum hit-stop
+        if (killed && (this.weapon === 'deagle' || this.weapon === 'sniper')) {
+          this.timescale = Math.min(this.timescale, 0.45) // heavy caliber hit-stop
         }
       } else {
         this.particles.burst(end, SPARK_COLOR, 8, 5, 0.35)
@@ -1035,6 +1154,14 @@ export class GameEngine implements CombatHost {
       draftOpen: this.draftHacks.length > 0,
       draftHacks: [...this.draftHacks],
       activeHacks: this.hackManager.list(),
+      chronoTimeScale: this.chronoTimeScale,
+      interactPrompt: this.levelManager.activeInteractable?.promptLabel ?? null,
+      stageName: this.levelManager.currentStage.name,
+      chapter: this.levelManager.currentStage.chapter,
+      roomName: this.levelManager.currentRoom?.roomName,
+      storyModal: { ...this.levelManager.storyModal },
+      isAiming: this.isAiming,
+      unlockedWeapons: [...this.unlockedWeapons],
     }
     const key = JSON.stringify(snap)
     if (force || key !== this.lastEmit) {
@@ -1097,7 +1224,14 @@ export class GameEngine implements CombatHost {
     this.lastHitAt = -99
     this.popups = []
     this.weapon = 'rifle'
-    this.ammo = { rifle: WEAPONS.rifle.mag, deagle: WEAPONS.deagle.mag }
+    this.unlockedWeapons = ['rifle', 'deagle']
+    this.isAiming = false
+    this.attackSpeedMult = 1.0
+    this.ammo = {
+      rifle: WEAPONS.rifle.mag,
+      deagle: WEAPONS.deagle.mag,
+      sniper: WEAPONS.sniper.mag,
+    }
     this.reloading = false
     this.firing = false
     this.triggerQueued = false
@@ -1146,6 +1280,11 @@ export class GameEngine implements CombatHost {
 
   private update(dtRaw: number, elapsed = dtRaw) {
     if (this.status !== 'playing') return
+    if (this.levelManager.storyModal.open) {
+      this.levelManager.update(this.pos, dtRaw)
+      this.emit()
+      return
+    }
     this.gameplayTime += elapsed
     const t = this.gameplayTime
     this.hackManager.update(elapsed)
@@ -1175,6 +1314,14 @@ export class GameEngine implements CombatHost {
     this.punchCd = Math.max(0, this.punchCd - dtRaw)
     this.slideCd = Math.max(0, this.slideCd - dtRaw)
     if (this.overchargeT > 0) this.overchargeT -= dtRaw
+
+    // Chrono-Miami: Tactical time-dilation
+    const moving = (this.keys.has('KeyW') || this.keys.has('KeyS') || this.keys.has('KeyA') || this.keys.has('KeyD'))
+    const isPlayerActive = !this.chronoMode || moving || this.gloryKills.isDashing || this.abilities.isDashing || this.firing || this.triggerQueued || this.reloading || this.slideT > 0 || this.punchAnim > 0 || this.abilities.isSlamming || !this.grounded || this.levelManager.storyModal.open
+    const targetChrono = isPlayerActive ? 1.0 : 0.05
+    this.chronoTimeScale = THREE.MathUtils.damp(this.chronoTimeScale, targetChrono, 12, dtRaw)
+    this.music.setTimeDilation(this.chronoTimeScale)
+    const worldDt = dt * this.chronoTimeScale
 
     // ---- movement ----
     const dashing = this.gloryKills.isDashing || this.abilities.isDashing
@@ -1341,8 +1488,12 @@ export class GameEngine implements CombatHost {
     const bob = this.grounded && this.slideT <= 0 ? Math.sin(this.bobT) * 0.06 : 0
     const slideK = this.slideT > 0 ? Math.sin((1 - this.slideT / SLIDE_TIME) * Math.PI) : 0
     const slideDip = slideK * 0.9
-    const targetFov = Math.max((sprintKey ? 82 : 75) + slideK * 8, this.gloryKills.fovFloor)
-    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dtRaw * 8)
+    let baseFov = (sprintKey ? 82 : 75) + slideK * 8
+    if (this.isAiming && this.weapon === 'sniper') {
+      baseFov = 24
+    }
+    const targetFov = Math.max(baseFov, this.gloryKills.fovFloor)
+    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dtRaw * 12)
     this.camera.updateProjectionMatrix()
 
     // Camera transform + shake + punch lunge
@@ -1364,7 +1515,7 @@ export class GameEngine implements CombatHost {
 
     // ---- weapon pose ----
     const w = WEAPONS[this.weapon]
-    const gun = this.weapon === 'rifle' ? this.gunRig.rifle : this.gunRig.deagle
+    const gun = this.weapon === 'rifle' ? this.gunRig.rifle : this.weapon === 'deagle' ? this.gunRig.deagle : this.gunRig.sniper
     this.gunKick = Math.max(0, this.gunKick - dt * 4.5)
     let gy2 = -0.42
     let rotX = 0
@@ -1418,8 +1569,24 @@ export class GameEngine implements CombatHost {
 
     // Waves / enemies
     if (this.draftHacks.length > 0) return
-    this.director.update(dt, t)
+    this.director.update(worldDt, t)
     if (this.draftHacks.length > 0) return
+
+    const levelUpdate = this.levelManager.update(this.pos, dtRaw)
+    if (levelUpdate.shouldSpawnRoomWave) {
+      const room = this.levelManager.currentRoom
+      if (room && room.waves.length > 0) {
+        const dronesToQueue: DroneType[] = []
+        for (const w of room.waves) {
+          for (const drone of w.drones) {
+            for (let i = 0; i < drone.count; i++) {
+              dronesToQueue.push(drone.type)
+            }
+          }
+        }
+        this.director.queueRoomWave(dronesToQueue)
+      }
+    }
 
     // Pickups
     for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1482,7 +1649,7 @@ export class GameEngine implements CombatHost {
       mat.opacity = s.life / s.total
     }
 
-    this.particles.update(dt)
+    this.particles.update(worldDt)
 
     // Tracers
     for (let i = this.tracers.length - 1; i >= 0; i--) {
@@ -1535,8 +1702,9 @@ export class GameEngine implements CombatHost {
     }
 
     const showGun = this.status !== 'menu'
-    this.gunRig.rifle.visible = showGun && this.weapon === 'rifle'
+    this.gunRig.rifle.visible = showGun && this.weapon === 'rifle' && !this.isAiming
     this.gunRig.deagle.visible = showGun && this.weapon === 'deagle'
+    this.gunRig.sniper.visible = showGun && this.weapon === 'sniper' && !this.isAiming
     if (this.status === 'playing') {
       this.update(dt, rawDelta)
     } else if (this.status === 'menu') {

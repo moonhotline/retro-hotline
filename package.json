@@ -1,11 +1,13 @@
 {
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
     "preview": "pnpm --filter frontend preview",
     "typecheck": "pnpm --filter frontend typecheck",
     "test": "vitest run",
+    "generate:level": "node scripts/generate_level.ts",
     "playtest": "node tools/playtest.mjs"
   },
   "devDependencies": {
