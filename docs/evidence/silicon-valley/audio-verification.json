@@ -1,0 +1,10 @@
+{
+  "method": "OfflineAudioContext rendering real Sfx.shoot; 20 shots at 90 ms with seeded noise",
+  "sampleRate": 48000,
+  "peak": 0.2730688154697418,
+  "dcMean": -0.00033113038603687993,
+  "firstSample": 0,
+  "tailPeak": 0,
+  "finite": true,
+  "passes": true
+}

@@ -103,9 +103,27 @@ export class Sfx {
   }
 
   shoot() {
-    this.tone(920, 0.13, 0.28, 'sawtooth', 120)
-    this.tone(1840, 0.09, 0.1, 'square', 240)
-    this.noise(0.04, 2800, 2, 0.22)
+    // Short body and transient leave audible space between 90ms rifle pulses.
+    this.tone(920, 0.055, 0.25, 'sawtooth', 150, 0.0015)
+    this.tone(140, 0.07, 0.22, 'triangle', 65, 0.002)
+    if (!this.ctx || !this.noiseBuf) return
+    const t = this.ctx.currentTime
+    const source = this.ctx.createBufferSource()
+    source.buffer = this.noiseBuf
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.value = 2800
+    filter.Q.value = 1.2
+    const gain = this.ctx.createGain()
+    gain.gain.setValueAtTime(0, t)
+    gain.gain.linearRampToValueAtTime(0.2, t + 0.0015)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.028)
+    gain.gain.linearRampToValueAtTime(0, t + 0.032)
+    source.connect(filter).connect(gain)
+    this.out(gain, 0)
+    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect() }
+    source.start(t)
+    source.stop(t + 0.033)
   }
 
   deagle() {

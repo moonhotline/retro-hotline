@@ -58,9 +58,9 @@ describe('vertical bridge arena', () => {
     }
   })
 
-  it('provides four animated pads and preserves the warehouse roof', () => {
-    expect(zones.pads).toHaveLength(4)
-    expect(scene.children.filter((child) => child.name === 'jump-pad')).toHaveLength(4)
+  it('provides five animated pads and preserves the warehouse roof', () => {
+    expect(zones.pads).toHaveLength(5)
+    expect(scene.children.filter((child) => child.name === 'jump-pad')).toHaveLength(5)
     expect(zones.walkRects).toContainEqual({ x0: 8, x1: 24, z0: 300, z1: 360, top: 7 })
     expect(() => zones.update(1)).not.toThrow()
   })
@@ -68,8 +68,9 @@ describe('vertical bridge arena', () => {
   it('spawns flying enemies over walkable regions and outside every wall/slab, including the fallback', () => {
     for (const random of [0, 0.5, 0.99]) {
       vi.spyOn(Math, 'random').mockReturnValue(random)
-      for (const z of [-370, -120, 0, 120, 330, 390]) {
+      for (const z of [-370, -120, 0, 120, 330, 390, 460, 520, 670]) {
         const spawn = zones.randomSpawnPoint(new THREE.Vector3(0, 10.3, z))
+        if (z > 440) expect(spawn.z).toBeGreaterThan(380)
         expect(zones.walkRects.some((r) => spawn.x >= r.x0 && spawn.x <= r.x1 && spawn.z >= r.z0 && spawn.z <= r.z1 && spawn.y > r.top)).toBe(true)
         for (const wall of zones.walls) {
           const overlaps = Math.abs(spawn.x - wall.x) <= wall.hw + 2.5 && Math.abs(spawn.z - wall.z) <= wall.hd + 2.5
@@ -77,5 +78,36 @@ describe('vertical bridge arena', () => {
         }
       }
     }
+  })
+})
+
+describe('Silicon Valley campus', () => {
+  it('connects the campus ground to a raycastable suspended Quantum Vault', () => {
+    expect(zones.walkRects).toContainEqual({ x0: -40, x1: 40, z0: 380, z1: 680, top: 0.6 })
+    expect(zones.walkRects).toContainEqual({ x0: -18, x1: 18, z0: 480, z1: 560, top: 9.5 })
+    const deck = scene.getObjectByName('sand-hill-quantum-vault-deck')!
+    expect(collidables).toContain(deck)
+    const ray = new THREE.Raycaster(new THREE.Vector3(0, 20, 500), new THREE.Vector3(0, -1, 0))
+    expect(ray.intersectObject(deck)[0]!.point.y).toBeCloseTo(9.5)
+    const under = new THREE.Vector3(0, 2.4, 500)
+    resolveWalls(zones.walls, under, 0.55, 0.6)
+    expect(under.toArray()).toEqual([0, 2.4, 500])
+    const onTop = new THREE.Vector3(0, 11.3, 500)
+    resolveWalls(zones.walls, onTop, 0.55, 9.5)
+    expect(onTop.toArray()).toEqual([0, 11.3, 500])
+  })
+
+  it('aims the launch pad at the vault and gives the monoliths solid cover', () => {
+    const pad = zones.pads.find((p) => p.z === 420)!
+    expect(pad.toArray()).toEqual([0, 0.6, 420])
+    const landingTime = (pad.boost.y + Math.sqrt(pad.boost.y ** 2 - 48 * (9.5 - pad.y))) / 24
+    expect(pad.z + pad.boost.z * landingTime).toBeGreaterThan(480)
+    expect(pad.z + pad.boost.z * landingTime).toBeLessThan(560)
+    expect(scene.children.filter((o) => o.name === 'palo-alto-data-monolith')).toHaveLength(10)
+    expect(zones.walls.some((w) => w.z === 442 && w.hw === 4 && w.h > 15)).toBe(true)
+    const core = scene.getObjectByName('sand-hill-quantum-core')!
+    const before = core.rotation.y
+    zones.update(2)
+    expect(core.rotation.y).not.toBe(before)
   })
 })

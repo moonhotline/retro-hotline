@@ -86,6 +86,117 @@ function key(code: string) {
   window.dispatchEvent(new KeyboardEvent('keyup', { code }))
 }
 
+describe('full-auto rifle and dedicated controls', () => {
+  it('clears held and queued inputs on blur and ignores HUD button clicks', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    window.dispatchEvent(new Event('blur'))
+    tick(1 / 60)
+    expect(engine.stats().ammo.rifle).toBe(32)
+    expect(engine['keys'].size).toBe(0)
+    const button = document.createElement('button')
+    document.body.appendChild(button)
+    button.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }))
+    button.remove()
+    tick(1 / 60)
+    expect(engine.stats().ammo.rifle).toBe(32)
+  })
+
+  it('keeps its cadence across uneven frames and recovers a quick tap between frames', () => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    tick(0.01)
+    expect(engine.stats().ammo.rifle).toBe(31)
+    for (let i = 0; i < 20; i++) tick(0.02)
+    expect(engine.stats().ammo.rifle).toBe(31)
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    for (let i = 0; i < 20; i++) for (const dt of [0.01, 0.03, 0.05]) tick(dt)
+    expect(31 - engine.stats().ammo.rifle).toBeGreaterThanOrEqual(20)
+    expect(31 - engine.stats().ammo.rifle).toBeLessThanOrEqual(21)
+  })
+
+  it.each([30, 60, 120])('sustains the 90ms cadence at %s FPS without climbing recoil', (fps) => {
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    for (let frame = 0; frame < fps * 1.8; frame++) {
+      tick(1 / fps)
+      expect(engine['recoil']).toBeLessThanOrEqual(0.045)
+    }
+    const shots = WEAPONS.rifle.mag - engine.stats().ammo.rifle
+    expect(shots).toBeGreaterThanOrEqual(20)
+    expect(shots).toBeLessThanOrEqual(21)
+    document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    for (let frame = 0; frame < fps; frame++) tick(1 / fps)
+    expect(WEAPONS.rifle.mag - engine.stats().ammo.rifle).toBe(shots)
+    expect(engine['recoil']).toBe(0)
+    expect(engine['gunKick']).toBe(0)
+  })
+
+  it('does not bank idle time into a burst and resumes full auto after a reload', () => {
+    for (let frame = 0; frame < 600; frame++) tick(1 / 60)
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    tick(1 / 60)
+    expect(engine.stats().ammo.rifle).toBe(31)
+    tick(1 / 60)
+    expect(engine.stats().ammo.rifle).toBe(31)
+    engine['ammo'].rifle = 0
+    tick(1 / 60)
+    expect(engine.stats().reloading).toBe(true)
+    for (let frame = 0; frame < 90; frame++) tick(1 / 60)
+    expect(engine.stats().reloading).toBe(false)
+    expect(engine.stats().ammo.rifle).toBeGreaterThan(25)
+    expect(engine.stats().ammo.rifle).toBeLessThan(32)
+  })
+
+  it('keeps the Eagle semi-automatic while a mouse button is held', () => {
+    key('KeyQ')
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    for (let frame = 0; frame < 120; frame++) tick(1 / 60)
+    expect(engine.stats().ammo.deagle).toBe(6)
+  })
+
+  it('reserves V for parry, G for slam and C for slide, including in the air', () => {
+    const parry = vi.spyOn(engine['abilities'], 'tryPulseParry')
+    const slam = vi.spyOn(engine['abilities'], 'tryKineticSlam')
+    key('KeyC')
+    expect(engine['slideT']).toBeGreaterThan(0)
+    engine['grounded'] = false
+    engine.playerPos().y += 10
+    key('KeyC')
+    for (const button of [0, 1, 2, 3, 4]) {
+      document.dispatchEvent(new MouseEvent('mousedown', { button }))
+      document.dispatchEvent(new MouseEvent('mouseup', { button }))
+    }
+    expect(engine['punchCd']).toBeGreaterThan(0)
+    expect(parry).not.toHaveBeenCalled()
+    expect(slam).not.toHaveBeenCalled()
+    key('KeyV')
+    expect(parry).toHaveBeenCalledOnce()
+    key('KeyG')
+    expect(slam).toHaveBeenCalledOnce()
+    expect(engine['abilities'].isSlamming).toBe(true)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG', repeat: true }))
+    expect(slam).toHaveBeenCalledOnce()
+  })
+})
+
+describe('district HUD', () => {
+  it.each([
+    [-285, 'SOUTH PLAZA // NEON ARCADE'],
+    [-284, 'BAY BRIDGE // TRANSIT SPAN'],
+    [284, 'BAY BRIDGE // TRANSIT SPAN'],
+    [285, 'NORTH GATE // LOGISTICS HUB'],
+    [400, 'NORTH GATE // LOGISTICS HUB'],
+    [401, 'SILICON VALLEY // QUANTUM CAMPUS'],
+    [680, 'SILICON VALLEY // QUANTUM CAMPUS'],
+  ])('publishes the district at camera z=%s', (z, district) => {
+    const onHud = vi.fn()
+    engine['onHud'] = onHud
+    engine.camera.position.z = Number(z)
+    engine['emit'](true)
+    expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({ district }))
+  })
+})
+
 describe('engine glory kill integration', () => {
   it.each(['KeyE', 'KeyF', 'RMB'])('%s executes once and produces collectible +35 HP and overdrive', (input) => {
     engine['health'] = 50
@@ -281,8 +392,8 @@ describe('engine neon hack integration', () => {
     engine.camera.rotation.set(0, 0, 0)
     engine.scene.updateMatrixWorld(true)
     engine['fire']()
-    expect(primary.hp).toBe(DRONE_STATS.gunner.hp - 1)
-    expect(secondary.hp).toBeCloseTo(DRONE_STATS.gunner.hp - 0.6)
+    expect(primary.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg)
+    expect(secondary.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg * 0.6)
     expect(untouched.hp).toBe(DRONE_STATS.gunner.hp)
     expect(engine.stats().tracers).toBe(2)
   })
@@ -301,7 +412,7 @@ describe('engine neon hack integration', () => {
     engine.scene.updateMatrixWorld(true)
     engine['fire']()
     expect(behind.hp).toBe(DRONE_STATS.gunner.hp)
-    expect(visible.hp).toBeCloseTo(DRONE_STATS.gunner.hp - 0.6)
+    expect(visible.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg * 0.6)
   })
 
   it('chains execution damage and refreshes dash cooldown and movement speed together', () => {
@@ -421,7 +532,7 @@ describe('engine persistence and layered audio', () => {
     expect(engine['music'].getCurrentTrackIndex()).toBe(1)
     expect(loadProfile()).toMatchObject({ musicTrackIndex: 1, musicVolume: 0.25, highScore: 500 })
     expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({
-      musicTrackName: 'HOTLINE MIDNIGHT', banner: 'TRACK // HOTLINE MIDNIGHT [128 BPM]',
+      musicTrackName: 'HOTLINE MIDNIGHT', musicTrackBpm: 128, banner: 'TRACK // HOTLINE MIDNIGHT [128 BPM]',
     }))
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', repeat: true }))
     expect(engine['music'].getCurrentTrackIndex()).toBe(1)
@@ -518,6 +629,32 @@ describe('engine vertical traversal', () => {
     const collidables: THREE.Object3D[] = []
     Object.assign(engine['env'], buildZones(engine.scene, collidables), { collidables })
   }
+
+  it.each([30, 60, 120])('crosses the north gate and launches onto the Quantum Vault at %s FPS', (fps) => {
+    arena()
+    engine.playerPos().set(0, 2.4, 399)
+    engine['yaw'] = Math.PI
+    engine['keys'].add('KeyW')
+    for (let i = 0; i < fps / 2; i++) tick(1 / fps)
+    expect(engine.playerPos().z).toBeGreaterThan(400)
+    engine['keys'].clear()
+    engine.playerPos().set(0, 2.4, 420)
+    tick(1 / fps)
+    expect(engine['grounded']).toBe(false)
+    let apex = 0
+    for (let i = 0; i < fps * 3; i++) {
+      tick(1 / fps)
+      apex = Math.max(apex, engine.playerPos().y - 1.8)
+    }
+    expect(apex).toBeGreaterThan(9.5)
+    expect(engine.playerPos().y).toBeCloseTo(11.3)
+    expect(engine.playerPos().z).toBeGreaterThan(480)
+    expect(engine.playerPos().z).toBeLessThan(560)
+    expect(engine['grounded']).toBe(true)
+    const landedZ = engine.playerPos().z
+    tick(1 / fps)
+    expect(engine.playerPos().z).toBe(landedZ)
+  })
 
   it.each([[-135, -120, 8.5, Math.PI], [135, 120, 8.5, 0], [-12, 0, 6, Math.PI]] as const)(
     'launches from z=%s and lands on its gantry', (padZ, z, top, yaw) => {
