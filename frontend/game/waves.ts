@@ -27,6 +27,9 @@ export interface Enemy {
   burstT: number
   aimT: number
   laser: THREE.Line | null
+  frozenTimer?: number
+  burnTimer?: number
+  burnTick?: number
 }
 
 export interface Projectile {
@@ -65,6 +68,7 @@ const BURST_A = new THREE.Color(0xff2975)
 const BURST_B = new THREE.Color(0xffd319)
 const BURST_C = new THREE.Color(0x00f0ff)
 const SPARK = new THREE.Color(0x9ffcff)
+const BURN_COLOR = new THREE.Color(0xff5500)
 const tmpA = new THREE.Vector3()
 const tmpB = new THREE.Vector3()
 const tmpC = new THREE.Vector3()
@@ -255,6 +259,22 @@ export class WaveDirector {
     outerMat.opacity = 0.75 + e.flash * 2
 
     e.staggerTimer = Math.max(0, e.staggerTimer - dt)
+    const isFrozen = (e.frozenTimer ?? 0) > 0
+    if (isFrozen) {
+      e.frozenTimer = Math.max(0, (e.frozenTimer ?? 0) - dt)
+    }
+
+    const isBurning = (e.burnTimer ?? 0) > 0
+    if (isBurning) {
+      e.burnTimer = Math.max(0, (e.burnTimer ?? 0) - dt)
+      e.burnTick = (e.burnTick ?? 0) + dt
+      if (e.burnTick >= 0.5) {
+        e.burnTick = 0
+        this.damageEnemy(e, 1.2, true)
+        this.host.particles.burst(g.position, BURN_COLOR, 3, 2, 0.4)
+      }
+    }
+
     if (e.staggerTimer > 0) {
       const color = Math.sin(t * 18) >= 0 ? 0xffd319 : 0x00f0ff
       outerMat.color.setHex(color)
@@ -265,11 +285,21 @@ export class WaveDirector {
       // Staggered drones cannot shoot or detonate on contact with the player.
       return
     }
-    outerMat.color.setHex(stats.color)
-    e.parts.core.material.color.setHex(stats.coreColor)
 
+    if (isFrozen) {
+      outerMat.color.setHex(0x00f0ff)
+      e.parts.core.material.color.setHex(0x9ffcff)
+    } else if (isBurning) {
+      outerMat.color.setHex(0xff3b00)
+      e.parts.core.material.color.setHex(0xffa500)
+    } else {
+      outerMat.color.setHex(stats.color)
+      e.parts.core.material.color.setHex(stats.coreColor)
+    }
+
+    const speedScale = isFrozen ? 0.4 : 1
     const move = (v: THREE.Vector3, speed: number) => {
-      g.position.addScaledVector(v, speed * dt)
+      g.position.addScaledVector(v, speed * speedScale * dt)
     }
 
     switch (stats.kind) {
@@ -478,6 +508,9 @@ export class WaveDirector {
       burstT: 0,
       aimT: 0,
       laser: null,
+      frozenTimer: 0,
+      burnTimer: 0,
+      burnTick: 0,
     }
     parts.proxy.userData['enemy'] = enemy
     parts.group.position.copy(pos)

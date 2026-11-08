@@ -1,0 +1,304 @@
+{
+  "url": "http://localhost:5173",
+  "startedAt": "2026-11-08T12:47:56.550Z",
+  "checks": [
+    {
+      "name": "Enter initializes the hub without launching combat",
+      "pass": true
+    },
+    {
+      "name": "desktop hub includes its footer without scrolling",
+      "pass": true
+    },
+    {
+      "name": "controls highlight cyber-abilities and tactical slide",
+      "pass": true
+    },
+    {
+      "name": "native dialog traps keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "Escape closes controls and restores the invoker",
+      "pass": true
+    },
+    {
+      "name": "N changes the live synth title and BPM in media",
+      "pass": true
+    },
+    {
+      "name": "track button cycles the same synth engine",
+      "pass": true
+    },
+    {
+      "name": "mobile hub has no horizontal overflow",
+      "pass": true
+    },
+    {
+      "name": "reduced motion disables both ambient animations",
+      "pass": true
+    },
+    {
+      "name": "controller connection is live; battery remains unavailable",
+      "pass": true
+    },
+    {
+      "name": "holding controller cross only initializes once",
+      "pass": true
+    },
+    {
+      "name": "controller disconnect restores keyboard status",
+      "pass": true
+    },
+    {
+      "name": "start → playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "weapon swap Q (rifle→deagle→rifle)",
+      "pass": true,
+      "weapon": "rifle"
+    },
+    {
+      "name": "fire (LMB) consumes ammo",
+      "pass": true,
+      "before": 32,
+      "after": 26
+    },
+    {
+      "name": "held rifle fires continuously; mouse does not trigger parry/slam",
+      "pass": true,
+      "shotsIn500ms": 6
+    },
+    {
+      "name": "reload R refills mag",
+      "pass": true,
+      "reloading": true,
+      "ammo": 32
+    },
+    {
+      "name": "punch F triggers cooldown",
+      "pass": true,
+      "punchCd": 0.48480000000447043
+    },
+    {
+      "name": "slide C while moving",
+      "pass": true,
+      "slideT": 0.4666000000014902,
+      "moved": 7.06
+    },
+    {
+      "name": "C does not trigger kinetic slam",
+      "pass": true
+    },
+    {
+      "name": "enemies spawn and are killable",
+      "pass": true,
+      "kills": 5,
+      "peakEnemies": 1,
+      "shots": 5,
+      "wave": 1
+    },
+    {
+      "name": "no enemy corpses after kills",
+      "pass": true,
+      "enemies": 0,
+      "sceneObjects": 450,
+      "baseObjects": 453,
+      "pickups": 4,
+      "extra": -3
+    },
+    {
+      "name": "campus travel is walkable past z=400 with a live district badge",
+      "pass": true,
+      "pos": {
+        "x": 0,
+        "y": 2.4,
+        "z": 460
+      },
+      "district": "SILICON VALLEY // QUANTUM CAMPUS"
+    },
+    {
+      "name": "campus jump pad lands on the Quantum Vault",
+      "pass": true,
+      "pos": {
+        "x": 0,
+        "y": 11.3,
+        "z": 493.10765270768184
+      }
+    },
+    {
+      "name": "zone travel keeps playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "pause/resume",
+      "pass": true,
+      "paused": "paused",
+      "after": "playing"
+    },
+    {
+      "name": "death → game over → restart",
+      "pass": true,
+      "over": true,
+      "status": "playing",
+      "health": 100
+    },
+    {
+      "name": "restart clears enemies (scene back to fresh size)",
+      "pass": true,
+      "enemies": 0,
+      "wave": 0,
+      "sceneObjects": 428,
+      "freshObjects": 428,
+      "leakedObjects": 0
+    },
+    {
+      "name": "GPU geometries do not leak across restart",
+      "pass": true,
+      "geometries": 374,
+      "freshGeometries": 370
+    },
+    {
+      "name": "music never restarted (step monotonic, ctx running)",
+      "pass": true,
+      "start": {
+        "trackIndex": 0,
+        "trackName": "BAY BRIDGE RUNNER",
+        "bpm": 116,
+        "ctx": "running",
+        "step": 46,
+        "nextTime": 6.036153017241382,
+        "intensity": 0,
+        "combo": 0,
+        "rank": "D",
+        "time": 5.898666666666666,
+        "volume": 0.6,
+        "muted": false,
+        "stems": {
+          "pad": 1,
+          "drum": 0,
+          "bass": 0.5,
+          "arp": 0.06,
+          "lead": 0
+        },
+        "cutoff": 420,
+        "filterDropping": false,
+        "activeSources": 9,
+        "disposed": false
+      },
+      "end": {
+        "trackIndex": 0,
+        "trackName": "BAY BRIDGE RUNNER",
+        "bpm": 116,
+        "ctx": "running",
+        "step": 264,
+        "nextTime": 34.22580818965526,
+        "intensity": 1,
+        "combo": 0,
+        "rank": "D",
+        "time": 34.04266666666667,
+        "volume": 0.6,
+        "muted": false,
+        "stems": {
+          "pad": 0.7,
+          "drum": 0.75,
+          "bass": 1,
+          "arp": 0.16,
+          "lead": 0
+        },
+        "cutoff": 900,
+        "filterDropping": false,
+        "activeSources": 10,
+        "disposed": false
+      }
+    }
+  ],
+  "samples": {
+    "menu": {
+      "fps": 60,
+      "frameMsP95": 17.5,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 175,
+      "textures": 14,
+      "sceneObjects": 428,
+      "enemies": 0
+    },
+    "combat": {
+      "fps": 60,
+      "frameMsP95": 17.5,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 382,
+      "textures": 14,
+      "sceneObjects": 450,
+      "enemies": 0
+    },
+    "zone-plaza": {
+      "fps": 60,
+      "frameMsP95": 18.1,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 380,
+      "textures": 14,
+      "sceneObjects": 448,
+      "enemies": 0
+    },
+    "zone-courtyard": {
+      "fps": 60,
+      "frameMsP95": 18.5,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 383,
+      "textures": 14,
+      "sceneObjects": 448,
+      "enemies": 0
+    },
+    "zone-silicon-valley": {
+      "fps": 60,
+      "frameMsP95": 18.8,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 383,
+      "textures": 14,
+      "sceneObjects": 448,
+      "enemies": 0
+    },
+    "zone-bridge": {
+      "fps": 60,
+      "frameMsP95": 18.4,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 383,
+      "textures": 14,
+      "sceneObjects": 448,
+      "enemies": 0
+    },
+    "fresh-run": {
+      "fps": 60,
+      "frameMsP95": 18.1,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 386,
+      "textures": 14,
+      "sceneObjects": 458,
+      "enemies": 2
+    }
+  },
+  "errors": [],
+  "gl": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+  "finishedAt": "2026-11-08T12:48:38.931Z",
+  "passed": 30,
+  "total": 30,
+  "consoleErrors": 0
+}

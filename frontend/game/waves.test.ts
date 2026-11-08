@@ -116,12 +116,12 @@ describe('wave drafts', () => {
 
   it('offers one unowned draft after the final kill and blocks the next wave until resumed', () => {
     const { host, director, enemy } = setup()
-    host.hackManager!.apply('ricochet')
+    host.hackManager!.apply('freeze')
     director.damageEnemy(enemy, 999, true)
     expect(host.onWaveDraft).toHaveBeenCalledOnce()
     const cards = vi.mocked(host.onWaveDraft!).mock.calls[0]![0]
     expect(cards).toHaveLength(3)
-    expect(cards.some((hack) => hack.id === 'ricochet')).toBe(false)
+    expect(cards.some((hack) => hack.id === 'freeze')).toBe(false)
     expect(director.draftPending).toBe(true)
     director.update(60, 60)
     expect(director.wave).toBe(1)

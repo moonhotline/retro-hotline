@@ -32,6 +32,7 @@ export interface Popup {
 export interface HudState {
   status: GameStatus
   health: number
+  maxHealth?: number
   ammo: number
   mag: number
   reloading: boolean

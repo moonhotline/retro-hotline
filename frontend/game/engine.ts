@@ -30,6 +30,7 @@ const SPRINT = 13.5
 const WATER_Y = -14
 const CENTER = new THREE.Vector2(0, 0)
 const SPARK_COLOR = new THREE.Color(0x9ffcff)
+const WALL_SPARK_COLOR = new THREE.Color(0x00f0ff)
 const CASING_COLOR = new THREE.Color(0xffe191)
 const DUST_COLOR = new THREE.Color(0x6a7078)
 const PICKUP_CHANCE = 0.22
@@ -137,6 +138,12 @@ export class GameEngine implements CombatHost {
   // Combat state
   private health = 100
   private lastHitAt = -99
+  private wallJumpsRemaining = 2
+  private wallJumpCooldown = 0
+
+  get maxHealth(): number {
+    return 100 + this.hackManager.maxHpBonus
+  }
   private tracers: { mesh: THREE.Mesh; life: number }[] = []
   private shockwaves: Shockwave[] = []
   private pickups: ActivePickup[] = []
@@ -254,6 +261,7 @@ export class GameEngine implements CombatHost {
       shockwaves: this.shockwaves.length,
       pickups: this.pickups.length,
       health: this.health,
+      maxHealth: this.maxHealth,
       score: this.score,
       kills: this.kills,
       gloryKills: this.gloryKillCount,
@@ -358,6 +366,9 @@ export class GameEngine implements CombatHost {
   applyDraftHack(id: HackId): void {
     if (this.status !== 'paused' || !this.draftHacks.some((hack) => hack.id === id) || this.hackManager.has(id)) return
     this.hackManager.apply(id)
+    if (id === 'max_hp') {
+      this.health = Math.min(this.maxHealth, this.health + 50)
+    }
     this.draftHacks = []
     this.director.resumeAfterDraft()
     this.keys.clear()
@@ -688,10 +699,6 @@ export class GameEngine implements CombatHost {
         ).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw)
         if (this.abilities.tryPhaseDash(direction)) this.slideT = 0
       }
-      if (e.code === 'KeyV') this.abilities.tryPulseParry()
-      if (e.code === 'KeyG' && !this.gloryKills.isDashing) {
-        if (this.abilities.tryKineticSlam()) this.slideT = 0
-      }
     }
     if (e.code === 'KeyQ') this.switchWeapon()
     if (e.code === 'KeyE' && !e.repeat) this.tryGloryKill()
@@ -790,7 +797,7 @@ export class GameEngine implements CombatHost {
   private fire() {
     const w = WEAPONS[this.weapon]
     this.ammo[this.weapon] -= this.hackManager.ammoCost(this.weapon)
-    const baseCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1)
+    const baseCd = w.fireCd * (this.overchargeT > 0 ? 0.55 : 1) * this.hackManager.fireCooldownMultiplier
     // Carry the partial frame forward, so held fire keeps its authored cadence.
     this.fireCd = Math.min(baseCd, this.fireCd < 0 ? this.fireCd + baseCd : baseCd)
     this.gunKick = w.kick
@@ -840,16 +847,13 @@ export class GameEngine implements CombatHost {
       } else {
         this.particles.burst(end, SPARK_COLOR, 8, 5, 0.35)
       }
-      if (this.hackManager.has('ricochet')) {
-        // Nudge a wall impact toward the incoming ray so the bounce starts outside its face.
-        const origin = end.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
-        this.hackManager.onHit(enemy ?? null, damage, { position: origin, kind: 'bullet', ignoreShield }, {
-          enemies: this.director.enemies,
-          damageEnemy: (target, amount, bypass) => this.director.damageEnemy(target, amount, bypass),
-          canHit: (a, b) => this.clearShot(a, b),
-          arc: (a, b) => this.addTracer(a, b, 0xffd319, w.tracerWidth),
-        })
-      }
+      const origin = end.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
+      this.hackManager.onHit(enemy ?? null, damage, { position: origin, kind: 'bullet', ignoreShield }, {
+        enemies: this.director.enemies,
+        damageEnemy: (target, amount, bypass) => this.director.damageEnemy(target, amount, bypass),
+        canHit: (a, b) => this.clearShot(a, b),
+        arc: (a, b) => this.addTracer(a, b, 0xffd319, w.tracerWidth),
+      })
     } else {
       end = this.raycaster.ray.at(160, new THREE.Vector3())
     }
@@ -1001,6 +1005,7 @@ export class GameEngine implements CombatHost {
     const snap: HudState = {
       status: this.status,
       health: Math.max(0, Math.round(this.health)),
+      maxHealth: this.maxHealth,
       ammo: this.ammo[this.weapon],
       mag: WEAPONS[this.weapon].mag,
       reloading: this.reloading,
@@ -1088,7 +1093,7 @@ export class GameEngine implements CombatHost {
     this.comboTimer = 0
     this.bestCombo = 0
     this.lastMult = 1
-    this.health = 100
+    this.health = this.maxHealth
     this.lastHitAt = -99
     this.popups = []
     this.weapon = 'rifle'
@@ -1230,6 +1235,46 @@ export class GameEngine implements CombatHost {
       if (this.slideT > 0) this.slideT = 0
       this.vy = 8
       this.grounded = false
+    } else if (!dashing && !this.grounded) {
+      // Wall run / climb mechanics
+      let touchingWall = false
+      let wallNx = 0
+      let wallNz = 0
+      for (const wall of this.env.walls) {
+        if (wall.bottom !== undefined && this.pos.y + 0.55 < wall.bottom) continue
+        if (this.pos.y > wall.h - 0.2 && (this.pos.y - EYE_OFFSET) > wall.h - 0.2) continue
+        const cx = THREE.MathUtils.clamp(this.pos.x, wall.x - wall.hw, wall.x + wall.hw)
+        const cz = THREE.MathUtils.clamp(this.pos.z, wall.z - wall.hd, wall.z + wall.hd)
+        const dx = this.pos.x - cx
+        const dz = this.pos.z - cz
+        const distSq = dx * dx + dz * dz
+        if (distSq <= (0.55 + 0.35) ** 2) {
+          touchingWall = true
+          const dist = Math.hypot(dx, dz)
+          if (dist > 1e-4) {
+            wallNx = dx / dist
+            wallNz = dz / dist
+          }
+          break
+        }
+      }
+      if (touchingWall) {
+        this.wallJumpCooldown = Math.max(0, this.wallJumpCooldown - dt)
+        if (this.vy < -4) {
+          this.vy = Math.max(this.vy, -4.5)
+        }
+        if (this.keys.has('Space') && this.wallJumpCooldown <= 0 && this.wallJumpsRemaining > 0) {
+          this.vy = 8.5
+          this.wallJumpsRemaining--
+          this.wallJumpCooldown = 0.35
+          this.launchVelocity.set(wallNx * 4, 0, wallNz * 4)
+          this.sfx.whoosh()
+          this.particles.burst(this.pos, WALL_SPARK_COLOR, 6, 2.5, 0.4)
+          this.banner = 'WALL CLIMB'
+          this.bannerTimer = 0.65
+          this.bannerId++
+        }
+      }
     }
     if (!dashing) this.vy -= 24 * dt
     let y = this.pos.y + (dashing ? 0 : this.vy * dt)
@@ -1251,6 +1296,8 @@ export class GameEngine implements CombatHost {
       y = groundEye
       this.vy = 0
       this.grounded = true
+      this.wallJumpsRemaining = 2
+      this.wallJumpCooldown = 0
       this.launchVelocity.set(0, 0, 0)
       this.lastSafe.copy(this.pos)
       this.lastSafe.y = groundEye
@@ -1282,6 +1329,8 @@ export class GameEngine implements CombatHost {
       this.pos.copy(this.lastSafe)
       this.vy = 0
       this.grounded = true
+      this.wallJumpsRemaining = 2
+      this.wallJumpCooldown = 0
       this.abilities.cancelMotion()
       this.launchVelocity.set(0, 0, 0)
       this.damagePlayer(8)

@@ -123,7 +123,7 @@ try {
   await page.getByRole('button', { name: 'CONTROLS & TACTICS', exact: true }).click()
   await page.waitForSelector('dialog[open]')
   await shot('controls-desktop')
-  check('controls clearly reserve keyboard V/G and separate C slide', await page.locator('dialog').innerText().then((text) => text.includes('V and G are keyboard only') && text.includes('Slide · ground only')))
+  check('controls highlight cyber-abilities and tactical slide', await page.locator('dialog').innerText().then((text) => text.includes('CYBER-ABILITIES') && text.includes('Tactical slide')))
   await page.keyboard.press('Tab')
   check('native dialog traps keyboard focus', await page.evaluate(() => !!document.activeElement?.closest('dialog')))
   await page.keyboard.press('Escape')

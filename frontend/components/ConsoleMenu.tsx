@@ -74,9 +74,9 @@ export function TrackBadge({ name = 'BAY BRIDGE RUNNER', bpm = 116 }: { name?: s
 }
 
 const CONTROL_GROUPS = [
-  { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide · ground only', 'C / CTRL']] },
+  { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide · ground only', 'C / CTRL']] },
   { title: 'COMBAT', rows: [['Full-auto rifle · hold', 'LMB'], ['Punch / close execution', 'RMB / F'], ['Glory shatter · staggered target', 'E'], ['Reload / swap weapon', 'R / Q']] },
-  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Pulse parry · reflect shots', 'V'], ['Kinetic slam · in air', 'G']] },
+  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Wall run / climb · air near wall', 'SPACE'], ['Tactical slide', 'C / CTRL']] },
   { title: 'AUDIO & SYSTEM', rows: [['Cycle synth track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
 ]
 
@@ -91,7 +91,7 @@ function ControlsGrid() {
           </section>
         ))}
       </div>
-      <div className="console-control-note"><kbd>V</kbd> PARRY <span>/</span> <kbd>G</kbd> SLAM <span>/</span> <kbd>C</kbd> SLIDE <p>V and G are keyboard only. Mouse buttons shoot and punch.</p></div>
+      <div className="console-control-note"><kbd>SHIFT</kbd> DASH <span>/</span> <kbd>SPACE</kbd> WALL CLIMB <span>/</span> <kbd>C</kbd> SLIDE <p>Mouse buttons shoot and punch. Press Space near walls to leap and climb.</p></div>
       <p className="console-tactic">Break a target into stagger, then press E to shatter it for health and overdrive. Take the campus launch pad to the Quantum Vault.</p>
     </>
   )
@@ -247,7 +247,7 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
                 </section>
                 <section className="console-activities" aria-label="Activities">
                   <article><div className="activity-top"><span>EXPEDITION</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M6 13 18 1M7 1h11v11" /></svg></div><h2>BAY TO SILICON VALLEY</h2><p>Transit span to Sand Hill Quantum Vault</p><div className="activity-route" aria-hidden="true"><i /><span /><i /><span /><i /><span /><i /></div></article>
-                  <article><div className="activity-top"><span>TACTICAL CYBER-COMBAT</span><span aria-hidden="true">✕</span></div><h2>HOLD THE TRIGGER.</h2><p>Full-Auto Pulse Rifle · Glory Shatter</p><div className="activity-foot">PHASE DASH <span>/</span> PARRY <kbd>V</kbd> <span>/</span> SLAM <kbd>G</kbd></div></article>
+                  <article><div className="activity-top"><span>TACTICAL CYBER-COMBAT</span><span aria-hidden="true">✕</span></div><h2>HOLD THE TRIGGER.</h2><p>Full-Auto Pulse Rifle · Glory Shatter</p><div className="activity-foot">PHASE DASH <span>/</span> WALL CLIMB <kbd>SPACE</kbd> <span>/</span> SLIDE <kbd>C</kbd></div></article>
                   <article><div className="activity-top"><span>PROCEDURAL WEBAUDIO</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 5v6m5-9v12m5-14v16m5-13v10m5-8v6" /></svg></div><h2>THE CITY HAS A PULSE.</h2><p>5 stems · 3 switchable synth tracks</p><div className="activity-foot">ZERO EXTERNAL MP3 / WAV MUSIC</div></article>
                 </section>
               </>

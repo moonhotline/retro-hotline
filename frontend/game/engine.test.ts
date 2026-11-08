@@ -154,7 +154,7 @@ describe('full-auto rifle and dedicated controls', () => {
     expect(engine.stats().ammo.deagle).toBe(6)
   })
 
-  it('reserves V for parry, G for slam and C for slide, including in the air', () => {
+  it('ignores V and G keys after mapping removal and preserves C for slide', () => {
     const parry = vi.spyOn(engine['abilities'], 'tryPulseParry')
     const slam = vi.spyOn(engine['abilities'], 'tryKineticSlam')
     key('KeyC')
@@ -167,15 +167,23 @@ describe('full-auto rifle and dedicated controls', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { button }))
     }
     expect(engine['punchCd']).toBeGreaterThan(0)
-    expect(parry).not.toHaveBeenCalled()
-    expect(slam).not.toHaveBeenCalled()
     key('KeyV')
-    expect(parry).toHaveBeenCalledOnce()
+    expect(parry).not.toHaveBeenCalled()
     key('KeyG')
-    expect(slam).toHaveBeenCalledOnce()
-    expect(engine['abilities'].isSlamming).toBe(true)
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG', repeat: true }))
-    expect(slam).toHaveBeenCalledOnce()
+    expect(slam).not.toHaveBeenCalled()
+  })
+
+  it('performs wall climb when airborne near a wall and pressing Space', () => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 1), new THREE.MeshBasicMaterial())
+    wall.position.copy(engine.playerPos()).add(new THREE.Vector3(0, 0, -0.6))
+    engine.scene.add(wall)
+    engine['env'].walls.push({ x: wall.position.x, z: wall.position.z, hw: 5, hd: 0.5, h: 10 })
+    engine['grounded'] = false
+    engine['vy'] = -2
+    engine['keys'].add('Space')
+    tick(0.05)
+    expect(engine['vy']).toBeGreaterThan(0)
+    expect(engine['banner']).toBe('WALL CLIMB')
   })
 })
 
@@ -288,7 +296,7 @@ describe('engine neon hack integration', () => {
   }
 
   it('opens a draft on wave clear, freezes gameplay clocks and rejects resume and unrelated IDs', () => {
-    engine.hackManager.apply('blood_momentum')
+    engine.hackManager.apply('freeze')
     engine.hackManager.onDashKill({ resetDashCooldown: () => {} })
     engine['abilities'].tryPulseParry()
     engine['keys'].add('KeyW')
@@ -318,7 +326,7 @@ describe('engine neon hack integration', () => {
     expect(engine.stats().abilities.pulseParry.remaining).toBe(parry)
     expect(engine.hackManager.speedBoostRemaining).toBe(2)
     expect(engine.stats().weapon).toBe('rifle')
-    engine.applyDraftHack('blood_momentum')
+    engine.applyDraftHack('freeze')
     expect(engine.stats().draftOpen).toBe(true)
     engine.applyDraftHack(cards[1]!.id)
     expect(engine.stats().status).toBe('playing')
@@ -348,8 +356,8 @@ describe('engine neon hack integration', () => {
   })
 
   it('clears the build, draft and temporary buffs on restart', () => {
-    engine.hackManager.apply('blood_momentum')
-    engine.hackManager.apply('overdrive_heatsink')
+    engine.hackManager.apply('freeze')
+    engine.hackManager.apply('attack_speed')
     engine.hackManager.onDashKill({ resetDashCooldown: () => {} })
     engine.hackManager.onParry({ refillMagazine: () => {} })
     draft()
@@ -381,144 +389,72 @@ describe('engine neon hack integration', () => {
     expect(engine['health']).toBeGreaterThan(90)
   })
 
-  it('bounces real hitscan bullets to exactly one other enemy', () => {
-    engine.hackManager.apply('ricochet')
+  it('freezes hit enemies when Cryo Freeze is active', () => {
+    engine.hackManager.apply('freeze')
     const primary = target(5, false)
-    const secondary = target(6, false)
-    secondary.parts.group.position.x = 3
-    const untouched = target(8, false)
-    untouched.parts.group.position.x = 6
     engine.camera.position.copy(engine.playerPos())
     engine.camera.rotation.set(0, 0, 0)
     engine.scene.updateMatrixWorld(true)
     engine['fire']()
-    expect(primary.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg)
-    expect(secondary.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg * 0.6)
-    expect(untouched.hp).toBe(DRONE_STATS.gunner.hp)
-    expect(engine.stats().tracers).toBe(2)
+    expect(primary.frozenTimer).toBe(2.5)
   })
 
-  it('bounces wall hits toward a visible target without shooting through the wall', () => {
-    engine.hackManager.apply('ricochet')
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.5), new THREE.MeshBasicMaterial())
-    wall.position.copy(engine.playerPos()).add(new THREE.Vector3(0, 0, -5))
-    engine.scene.add(wall)
-    engine['env'].collidables.push(wall)
-    const behind = target(6, false)
-    const visible = target(4, false)
-    visible.parts.group.position.x = 3
+  it('ignites enemies with burn damage over time when Pyro Burn is active', () => {
+    engine.hackManager.apply('burn')
+    const primary = target(5, false)
     engine.camera.position.copy(engine.playerPos())
     engine.camera.rotation.set(0, 0, 0)
     engine.scene.updateMatrixWorld(true)
     engine['fire']()
-    expect(behind.hp).toBe(DRONE_STATS.gunner.hp)
-    expect(visible.hp).toBeCloseTo(DRONE_STATS.gunner.hp - WEAPONS.rifle.dmg * 0.6)
+    expect(primary.burnTimer).toBe(3.0)
+    const prevHp = primary.hp
+    tick(0.6)
+    expect(primary.hp).toBeLessThan(prevHp)
   })
 
-  it('chains execution damage and refreshes dash cooldown and movement speed together', () => {
-    engine.hackManager.apply('chain_lightning')
-    engine.hackManager.apply('blood_momentum')
+  it('reduces fire cooldown by 35% when Rapid Trigger is active', () => {
+    expect(engine.hackManager.fireCooldownMultiplier).toBe(1)
+    engine.hackManager.apply('attack_speed')
+    expect(engine.hackManager.fireCooldownMultiplier).toBe(0.65)
+    engine['fire']()
+    expect(engine['fireCd']).toBeCloseTo(WEAPONS.rifle.fireCd * 0.65)
+  })
+
+  it('increases max HP to 150 and restores 50 HP on acquiring Vitality Matrix', () => {
+    expect(engine.maxHealth).toBe(100)
+    engine['health'] = 70
+    engine['draftHacks'].push({
+      id: 'max_hp',
+      name: '装甲强化 // Vitality Core',
+      tier: 'COMMON',
+      badge: 'HP',
+      tagline: 'REINFORCED CHASSIS.',
+      description: '+50 max HP',
+    })
+    engine['status'] = 'paused'
+    engine.applyDraftHack('max_hp')
+    expect(engine.maxHealth).toBe(150)
+    expect(engine.stats().health).toBe(120)
+  })
+
+  it('permanently increases move speed by 30% with Cyber Agility', () => {
+    expect(engine.hackManager.speedMultiplier).toBe(1)
+    engine.hackManager.apply('move_speed')
+    expect(engine.hackManager.speedMultiplier).toBeCloseTo(1.3)
+    engine['keys'].add('KeyW')
+    const startZ = engine.playerPos().z
+    tick(0.1)
+    expect(startZ - engine.playerPos().z).toBeCloseTo(8 * 1.3 * 0.1)
+  })
+
+  it('glory kill still executes staggered targets within range and refreshes dash', () => {
     const executed = target()
-    const nearby = target(10, false)
-    const distant = target(30, false)
     engine['abilities'].tryPhaseDash(new THREE.Vector3(1, 0, 0))
     engine['abilities'].cancelMotion()
     expect(engine.stats().abilities.phaseDash.remaining).toBeGreaterThan(0)
     key('KeyE')
     expect(engine['director'].enemies).not.toContain(executed)
-    expect(nearby.hp).toBeCloseTo(DRONE_STATS.gunner.hp * 0.65)
-    expect(distant.hp).toBe(DRONE_STATS.gunner.hp)
     expect(engine.stats().abilities.phaseDash.remaining).toBe(0)
-    expect(engine.hackManager.speedMultiplier).toBe(1.4)
-    engine['gloryKills'].reset()
-    engine['hitstopT'] = 0
-    engine['timescale'] = 1
-    engine['keys'].add('KeyW')
-    const z = engine.playerPos().z
-    tick(0.1)
-    expect(z - engine.playerPos().z).toBeCloseTo(8 * 1.4 * 0.1)
-  })
-
-  it('refreshes Blood Momentum on a phase dash slice', () => {
-    engine.hackManager.apply('blood_momentum')
-    const sliced = target(3)
-    target(50, false)
-    key('ShiftLeft')
-    tick(0.05)
-    expect(engine['director'].enemies).not.toContain(sliced)
-    expect(engine.stats().abilities.phaseDash.remaining).toBe(0)
-    expect(engine.stats().speedBoostRemaining).toBe(2)
-  })
-
-  it('only refills the equipped magazine on a successful parry, cancels reload and saves ammo', () => {
-    engine.hackManager.apply('overdrive_heatsink')
-    engine['ammo'] = { rifle: 2, deagle: 1 }
-    key('KeyR')
-    key('KeyV')
-    expect(engine.stats().ammo.rifle).toBe(2)
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial())
-    sprite.position.copy(engine.playerPos()).add(new THREE.Vector3(0, 0, -3))
-    const projectile = { sprite, vel: new THREE.Vector3(0, 0, 10), dmg: 5, life: 3, byPlayer: false }
-    expect(engine.deflectProjectile(projectile, 0)).toBe(true)
-    expect(engine.stats().ammo).toEqual({ rifle: WEAPONS.rifle.mag, deagle: 1 })
-    expect(engine.stats().reloading).toBe(false)
-    engine['fire']()
-    engine['fire']()
-    expect(engine.stats().ammo.rifle).toBe(WEAPONS.rifle.mag - 1)
-    expect(engine.deflectProjectile(projectile, 0)).toBe(false)
-    expect(engine.stats().ammo.rifle).toBe(WEAPONS.rifle.mag - 1)
-    sprite.material.dispose()
-  })
-
-  it('Bass Drop extends the slam impact to 18m and forces stagger above the usual HP threshold', () => {
-    engine.hackManager.apply('bass_drop')
-    const inside = target(18, false)
-    inside.hp = 200
-    const outside = target(18.01, false)
-    outside.hp = 200
-    engine['grounded'] = false
-    engine.playerPos().y += 5
-    expect(engine['abilities'].tryKineticSlam()).toBe(true)
-    engine.playerPos().y -= 5
-    engine['grounded'] = true
-    engine['abilities'].onLanding()
-    expect(inside.hp).toBe(155)
-    expect(inside.staggerTimer).toBe(3)
-    expect(outside.hp).toBe(200)
-    expect(outside.staggerTimer).toBe(0)
-  })
-
-  it.each(['KeyE', 'KeyF', 'RMB'])('Void Leash enables a 26m execution with %s', (input) => {
-    engine.hackManager.apply('void_leash')
-    const far = target(26)
-    target(50, false)
-    if (input === 'RMB') document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }))
-    else key(input)
-    expect(engine['director'].enemies).not.toContain(far)
-    expect(engine.stats().gloryDashing).toBe(true)
-  })
-
-  it('Void Leash still requires stagger, forward aim, range and a clear path', () => {
-    engine.hackManager.apply('void_leash')
-    const far = target(26.01)
-    key('KeyE')
-    expect(engine.stats().kills).toBe(0)
-    far.parts.group.position.z = engine.playerPos().z - 20
-    far.staggerTimer = 0
-    key('KeyE')
-    expect(engine.stats().kills).toBe(0)
-    far.staggerTimer = 3
-    engine['yaw'] = Math.PI
-    key('KeyE')
-    expect(engine.stats().kills).toBe(0)
-    engine['yaw'] = 0
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 1), new THREE.MeshBasicMaterial())
-    wall.position.copy(engine.playerPos()).add(new THREE.Vector3(0, 0, -10))
-    engine.scene.add(wall)
-    engine['env'].collidables.push(wall)
-    key('KeyE')
-    expect(engine.stats().kills).toBe(0)
-    expect(engine['director'].enemies).toContain(far)
   })
 })
 
@@ -575,7 +511,7 @@ describe('engine persistence and layered audio', () => {
 
   it('records death once, preserving best combo, glory kills, selected hacks and audio preferences', () => {
     saveProfile({ musicVolume: 0.25, sfxVolume: 0.2 })
-    engine.hackManager.apply('bass_drop')
+    engine.hackManager.apply('freeze')
     engine['director'].wave = 3
     target()
     target(50, false)
@@ -587,7 +523,7 @@ describe('engine persistence and layered audio', () => {
     engine.damagePlayer(1000)
     expect(engine['music'].setComboRank).toHaveBeenLastCalledWith(0)
     expect(loadProfile()).toEqual({ highScore: score, maxWave: 3, maxCombo: 1, totalKills: 1, totalGloryKills: 1,
-      unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.25, musicTrackIndex: 0 })
+      unlockedHacks: ['freeze'], sfxVolume: 0.2, musicVolume: 0.25, musicTrackIndex: 0 })
     expect(engine['debugApi']().profile()).toEqual(loadProfile())
     engine.damagePlayer(1000)
     engine.restart()
