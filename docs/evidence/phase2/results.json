@@ -1,0 +1,179 @@
+{
+  "url": "https://retro.oodai.space",
+  "startedAt": "2026-11-08T05:05:34.398Z",
+  "checks": [
+    {
+      "name": "start → playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "weapon swap Q (rifle→deagle→rifle)",
+      "pass": true,
+      "weapon": "rifle"
+    },
+    {
+      "name": "fire (LMB) consumes ammo",
+      "pass": true,
+      "before": 32,
+      "after": 27
+    },
+    {
+      "name": "reload R refills mag",
+      "pass": true,
+      "reloading": true,
+      "ammo": 32
+    },
+    {
+      "name": "punch F triggers cooldown",
+      "pass": true,
+      "punchCd": 0.4832999999970198
+    },
+    {
+      "name": "slide C while moving",
+      "pass": true,
+      "slideT": 0.466699999999255,
+      "moved": 7.05
+    },
+    {
+      "name": "enemies spawn and are killable",
+      "pass": true,
+      "kills": 12,
+      "peakEnemies": 2,
+      "shots": 21,
+      "wave": 2
+    },
+    {
+      "name": "no enemy corpses after kills",
+      "pass": true,
+      "enemies": 0,
+      "sceneObjects": 303,
+      "baseObjects": 298,
+      "pickups": 6,
+      "extra": 5
+    },
+    {
+      "name": "zone travel keeps playing",
+      "pass": true,
+      "status": "playing"
+    },
+    {
+      "name": "pause/resume",
+      "pass": true,
+      "paused": "paused",
+      "after": "playing"
+    },
+    {
+      "name": "death → game over → restart",
+      "pass": true,
+      "over": true,
+      "status": "playing",
+      "health": 100
+    },
+    {
+      "name": "restart clears enemies (scene back to fresh size)",
+      "pass": true,
+      "enemies": 0,
+      "wave": 0,
+      "sceneObjects": 273,
+      "freshObjects": 273,
+      "leakedObjects": 0
+    },
+    {
+      "name": "GPU geometries do not leak across restart",
+      "pass": true,
+      "geometries": 237,
+      "freshGeometries": 139
+    },
+    {
+      "name": "music never restarted (step monotonic, ctx running)",
+      "pass": true,
+      "start": {
+        "ctx": "running",
+        "step": 1,
+        "intensity": 1,
+        "time": 0.02666666666666667
+      },
+      "end": {
+        "ctx": "running",
+        "step": 254,
+        "intensity": 1,
+        "time": 32.730666666666664
+      }
+    }
+  ],
+  "samples": {
+    "menu": {
+      "fps": 60,
+      "frameMsP95": 17.4,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 135,
+      "textures": 14,
+      "sceneObjects": 273,
+      "enemies": 0
+    },
+    "combat": {
+      "fps": 60,
+      "frameMsP95": 17.7,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 245,
+      "textures": 14,
+      "sceneObjects": 304,
+      "enemies": 0
+    },
+    "zone-plaza": {
+      "fps": 60,
+      "frameMsP95": 17.6,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 255,
+      "textures": 14,
+      "sceneObjects": 303,
+      "enemies": 0
+    },
+    "zone-courtyard": {
+      "fps": 60,
+      "frameMsP95": 17.8,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 255,
+      "textures": 14,
+      "sceneObjects": 303,
+      "enemies": 0
+    },
+    "zone-bridge": {
+      "fps": 60,
+      "frameMsP95": 17.9,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 255,
+      "textures": 14,
+      "sceneObjects": 303,
+      "enemies": 0
+    },
+    "fresh-run": {
+      "fps": 60,
+      "frameMsP95": 17.5,
+      "drawCalls": 1,
+      "lines": 0,
+      "triangles": 1,
+      "geometries": 246,
+      "textures": 14,
+      "sceneObjects": 303,
+      "enemies": 2
+    }
+  },
+  "errors": [],
+  "gl": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+  "finishedAt": "2026-11-08T05:06:27.529Z",
+  "passed": 14,
+  "total": 14,
+  "consoleErrors": 0
+}

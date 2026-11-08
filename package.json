@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "preview": "pnpm --filter frontend preview",
+    "typecheck": "pnpm --filter frontend typecheck",
+    "test": "vitest run",
+    "playtest": "node tools/playtest.mjs"
+  },
+  "devDependencies": {
+    "vitest": "4.1.9"
+  }
+}
