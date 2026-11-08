@@ -5,6 +5,20 @@ export type WeaponId = 'rifle' | 'deagle'
 export type PickupKind = 'heal' | 'gem' | 'stash' | 'overcharge'
 export type PopupKind = 'score' | 'crit' | 'heal' | 'gem'
 
+export interface AbilityState {
+  cooldown: number
+  remaining: number
+  fill: number
+  ready: boolean
+  active: boolean
+}
+
+export interface AbilityStates {
+  phaseDash: AbilityState
+  pulseParry: AbilityState
+  kineticSlam: AbilityState
+}
+
 export interface Popup {
   id: number
   text: string
@@ -38,4 +52,5 @@ export interface HudState {
   weapon: WeaponId
   overchargeFrac: number
   slideFrac: number
+  abilities: AbilityStates
 }

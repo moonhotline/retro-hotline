@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { GameEngine } from '../game/engine'
 import { MUSIC_CREDIT } from '../game/music'
-import type { HudState, WeaponId } from '../game/types'
+import type { AbilityStates, HudState, WeaponId } from '../game/types'
 import '../game.css'
 
 const INITIAL_HUD: HudState = {
@@ -29,7 +29,18 @@ const INITIAL_HUD: HudState = {
   weapon: 'rifle',
   overchargeFrac: 0,
   slideFrac: 1,
+  abilities: {
+    phaseDash: { cooldown: 2.5, remaining: 0, fill: 1, ready: true, active: false },
+    pulseParry: { cooldown: 3.5, remaining: 0, fill: 1, ready: true, active: false },
+    kineticSlam: { cooldown: 5, remaining: 0, fill: 1, ready: true, active: false },
+  },
 }
+
+const ABILITY_INFO: { id: keyof AbilityStates; key: string; label: string }[] = [
+  { id: 'phaseDash', key: 'SHIFT', label: 'DASH' },
+  { id: 'pulseParry', key: 'V', label: 'PARRY' },
+  { id: 'kineticSlam', key: 'G', label: 'SLAM' },
+]
 
 const WEAPON_INFO: Record<WeaponId, string> = {
   rifle: 'PULSE RIFLE',
@@ -80,6 +91,29 @@ function Hud({ hud }: { hud: HudState }) {
 
       <Crosshair />
       <HitMarker id={hud.hitMarkerId} crit={hud.hitMarkerCrit} />
+
+      <div className="ability-hud font-tech" aria-label="Cyber abilities">
+        {ABILITY_INFO.map(({ id, key, label }) => {
+          const ability = hud.abilities[id]
+          const state = ability.active ? 'ACTIVE' : ability.ready ? 'READY' : `${ability.remaining.toFixed(1)}s`
+          return (
+            <div
+              key={id}
+              className={`ability-pill${ability.ready ? ' ability-ready' : ''}${ability.active ? ' ability-active' : ''}`}
+              role="progressbar"
+              aria-label={`${label}, ${state}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(ability.fill * 100)}
+              aria-valuetext={state}
+            >
+              <span className="ability-fill" style={{ transform: `scaleX(${ability.fill})` }} />
+              <span className="ability-label">[{key}] {label}</span>
+              <span className="ability-state">{state}</span>
+            </div>
+          )
+        })}
+      </div>
 
       {/* combo + overdrive, under crosshair */}
       <div className="absolute left-1/2 top-[60%] flex -translate-x-1/2 flex-col items-center gap-2">
@@ -244,13 +278,24 @@ function Kbd({ children }: { children: string }) {
 
 function ControlsGrid() {
   return (
-    <div className="mt-6 grid grid-cols-2 gap-x-10 gap-y-2 text-sm text-white/75">
+    <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-2 text-sm text-white/75 sm:grid-cols-2">
       <div className="flex items-center justify-between gap-4">
-        <span>MOVE / SPRINT</span>
+        <span>MOVE</span>
         <span className="flex gap-1">
           <Kbd>WASD</Kbd>
-          <Kbd>SHIFT</Kbd>
         </span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span>PHASE DASH / HOLD SPRINT</span>
+        <Kbd>SHIFT</Kbd>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span>PULSE PARRY</span>
+        <Kbd>V</Kbd>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span>KINETIC SLAM · IN AIR</span>
+        <span className="flex gap-1"><Kbd>G</Kbd><Kbd>C</Kbd></span>
       </div>
       <div className="flex items-center justify-between gap-4">
         <span>SHOOT / RELOAD</span>
@@ -345,7 +390,7 @@ export default function GamePage() {
         <div className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-[#0d0221]/55">
           <div className="menu-grid-floor" />
           <div className="absolute left-0 right-0 top-[38%] h-[2px] bg-[#ff2975] shadow-[0_0_24px_6px_rgba(255,41,117,0.8)]" />
-          <div className="neon-panel relative z-10 mx-4 max-w-xl rounded-2xl p-10 text-white">
+          <div className="neon-panel relative z-10 mx-4 max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-2xl p-6 text-white sm:p-10">
             <div className="font-tech text-xs font-semibold uppercase tracking-[0.5em] text-[#9ffcff]">
               Miami Nights Protocol · 1989
             </div>

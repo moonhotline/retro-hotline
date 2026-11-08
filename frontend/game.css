@@ -8,6 +8,66 @@
   font-family: 'Share Tech Mono', monospace;
 }
 
+.ability-hud {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  display: flex;
+  gap: 0.5rem;
+  transform: translateX(-50%);
+}
+
+.ability-pill {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 6.5rem;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #557c89;
+  border-radius: 999px;
+  background: #09051e;
+  color: #b2d2db;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ability-fill {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 240, 255, 0.16);
+  transform-origin: left;
+}
+
+.ability-label, .ability-state {
+  position: relative;
+}
+
+.ability-state {
+  font-size: 0.65rem;
+}
+
+.ability-ready {
+  border-color: #00f0ff;
+  color: #b9fcff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+}
+
+.ability-active {
+  border-color: #ffd319;
+  color: #ffe991;
+}
+
+@media (max-width: 1000px) {
+  .ability-hud { bottom: 8rem; }
+}
+
+@media (max-width: 480px) {
+  .ability-hud { gap: 0.3rem; }
+  .ability-pill { min-width: 5.5rem; padding: 0.4rem 0.5rem; }
+}
+
 .neon-cyan {
   color: #9ffcff;
   text-shadow: 0 0 4px rgba(0, 240, 255, 0.6);

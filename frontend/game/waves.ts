@@ -28,11 +28,12 @@ export interface Enemy {
   laser: THREE.Line | null
 }
 
-interface Projectile {
+export interface Projectile {
   sprite: THREE.Sprite
   vel: THREE.Vector3
   dmg: number
   life: number
+  byPlayer?: boolean
 }
 
 export interface CombatHost {
@@ -54,6 +55,7 @@ export interface CombatHost {
   spawnPoint(): THREE.Vector3
   collidables(): THREE.Object3D[]
   walls(): Wall[]
+  deflectProjectile?(projectile: Projectile, dt: number): boolean
 }
 
 const BURST_A = new THREE.Color(0xff2975)
@@ -127,15 +129,18 @@ export class WaveDirector {
       return true
     }
     const stats = DRONE_STATS[enemy.type]
-    if (enemy.hp <= Math.max(1.2, stats.hp * 0.28) && enemy.staggerTimer <= 0) {
-      enemy.staggerTimer = 3.0
-      // Interrupt queued bursts and laser charges; recovery starts a fresh attack.
-      enemy.burst = 0
-      enemy.aimT = 0
-      enemy.fireT = Math.max(enemy.fireT, 0.6)
-      if (enemy.laser) (enemy.laser.material as THREE.LineBasicMaterial).opacity = 0
-    }
+    if (enemy.hp <= Math.max(1.2, stats.hp * 0.28)) this.staggerEnemy(enemy)
     return false
+  }
+
+  staggerEnemy(enemy: Enemy) {
+    if (!this.enemies.includes(enemy) || enemy.hp <= 0 || enemy.staggerTimer > 0) return
+    enemy.staggerTimer = 3
+    // Interrupt queued bursts and laser charges; recovery starts a fresh attack.
+    enemy.burst = 0
+    enemy.aimT = 0
+    enemy.fireT = Math.max(enemy.fireT, 0.6)
+    if (enemy.laser) (enemy.laser.material as THREE.LineBasicMaterial).opacity = 0
   }
 
   /** Push an enemy away (punch / slide impact). */
@@ -167,7 +172,7 @@ export class WaveDirector {
       this.updateEnemy(e, dt, t, pp, collidables)
     }
 
-    // Enemy projectiles
+    // Swept collisions also cover bolts accelerated by Pulse Parry.
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i]!
       p.life -= dt
@@ -175,21 +180,40 @@ export class WaveDirector {
         this.removeProjectile(i)
         continue
       }
-      // Segment collision against walls/cover
+      this.host.deflectProjectile?.(p, dt)
       const step = tmpA.copy(p.vel).multiplyScalar(dt)
       const len = step.length()
+      if (len <= 0) continue
       this.raycaster.set(p.sprite.position, step.normalize())
       this.raycaster.far = len
       const blocked = this.raycaster.intersectObjects(collidables, false)
-      if (blocked.length > 0) {
-        this.host.particles.burst(p.sprite.position, SPARK, 5, 3, 0.3)
-        this.removeProjectile(i)
-        continue
+      let nearest = Math.min(len, blocked[0]?.distance ?? Infinity)
+      let target: Enemy | null = null
+      let hitPlayer = false
+      const hitDistance = (center: THREE.Vector3, radius: number): number => {
+        if (p.sprite.position.distanceToSquared(center) <= radius * radius) return 0
+        const point = this.raycaster.ray.intersectSphere(new THREE.Sphere(center, radius), tmpC)
+        return point ? point.distanceTo(p.sprite.position) : Infinity
       }
-      p.sprite.position.addScaledVector(p.vel, dt)
-      if (p.sprite.position.distanceTo(pp) < 1.2) {
+      if (p.byPlayer) {
+        for (const enemy of this.enemies) {
+          const distance = hitDistance(enemy.parts.group.position, enemy.radius)
+          if (distance < nearest) { nearest = distance; target = enemy }
+        }
+      } else {
+        hitPlayer = hitDistance(pp, 1.2) < nearest
+      }
+      if (target) {
+        this.damageEnemy(target, p.dmg, true)
+        this.removeProjectile(i)
+      } else if (hitPlayer) {
         this.host.damagePlayer(p.dmg)
         this.removeProjectile(i)
+      } else if (blocked.length > 0) {
+        this.host.particles.burst(p.sprite.position, SPARK, 5, 3, 0.3)
+        this.removeProjectile(i)
+      } else {
+        p.sprite.position.addScaledVector(p.vel, dt)
       }
     }
   }

@@ -146,6 +146,47 @@ export class Sfx {
     src.stop(t0 + 0.32)
   }
 
+  phaseDash() {
+    this.noise(0.18, 800, 0.9, 0.55, 120)
+  }
+
+  parryClash() {
+    this.noise(0.025, 6200, 0.8, 0.45, 1800)
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    const carrier = this.ctx.createOscillator()
+    const modulator = this.ctx.createOscillator()
+    const depth = this.ctx.createGain()
+    const envelope = this.ctx.createGain()
+    carrier.type = modulator.type = 'sine'
+    carrier.frequency.setValueAtTime(2200, t)
+    modulator.frequency.setValueAtTime(3300, t)
+    depth.gain.setValueAtTime(1100, t)
+    depth.gain.exponentialRampToValueAtTime(1, t + 0.3)
+    envelope.gain.setValueAtTime(0.001, t)
+    envelope.gain.linearRampToValueAtTime(0.35, t + 0.002)
+    envelope.gain.exponentialRampToValueAtTime(0.001, t + 0.4)
+    modulator.connect(depth).connect(carrier.frequency)
+    carrier.connect(envelope)
+    this.out(envelope, 0)
+    carrier.onended = () => {
+      carrier.disconnect()
+      modulator.disconnect()
+      depth.disconnect()
+      envelope.disconnect()
+    }
+    carrier.start(t)
+    modulator.start(t)
+    carrier.stop(t + 0.4)
+    modulator.stop(t + 0.4)
+  }
+
+  slamImpact() {
+    this.tone(45, 0.65, 0.8, 'sine', 24, 0.003)
+    this.noise(0.42, 650, 0.55, 0.6, 70)
+    this.noise(0.12, 1900, 0.7, 0.3, 260)
+  }
+
   whoosh() {
     this.noise(0.4, 380, 0.8, 0.32, 2200)
     this.tone(180, 0.35, 0.12, 'sine', 520)
