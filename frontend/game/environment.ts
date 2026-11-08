@@ -9,7 +9,7 @@ export interface Environment {
   collidables: THREE.Object3D[]
   walls: Wall[]
   walkRects: WalkRect[]
-  pads: THREE.Vector3[]
+  pads: Zones['pads']
   randomSpawnPoint: (playerPos: THREE.Vector3) => THREE.Vector3
 }
 

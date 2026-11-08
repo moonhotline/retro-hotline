@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HackTerminal } from '../components/HackTerminal'
 import type { HackId } from '../game/combat/modifiers'
+import { loadProfile } from '../game/combat/storage'
 import { GameEngine } from '../game/engine'
 import type { AbilityStates, HudState, WeaponId } from '../game/types'
 import '../game.css'
@@ -344,7 +345,7 @@ function ControlsGrid() {
         </span>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <span>JUMP / MUSIC</span>
+        <span>JUMP / AUDIO</span>
         <span className="flex gap-1">
           <Kbd>SPACE</Kbd>
           <Kbd>M</Kbd>
@@ -403,6 +404,7 @@ export default function GamePage() {
   const playRef = useRef<HTMLButtonElement>(null)
   const controlsRef = useRef<HTMLDialogElement>(null)
   const [hud, setHud] = useState<HudState>(INITIAL_HUD)
+  const [profile, setProfile] = useState(loadProfile)
   const [ps5Standby, setPs5Standby] = useState(true)
   const [showControls, setShowControls] = useState(false)
   const [clockTime, setClockTime] = useState(() => new Date().toLocaleTimeString([], {
@@ -426,7 +428,7 @@ export default function GamePage() {
     if (hud.muted) return
     try {
       const audio = new Audio('/audio/sfx_combo_pickup.wav')
-      audio.volume = 0.35
+      audio.volume = loadProfile().sfxVolume * 0.5
       void audio.play().catch(() => {})
     } catch {}
   }, [hud.muted])
@@ -461,6 +463,10 @@ export default function GamePage() {
   }, [])
 
   const status = hud.status
+
+  useEffect(() => {
+    setProfile(loadProfile())
+  }, [status])
 
   useEffect(() => {
     if (status !== 'menu') return
@@ -566,7 +572,7 @@ export default function GamePage() {
                 <span className="ps5-glyph-cross">✕</span>
                 <span className="ps5-glyph-circle">○</span>
                 <span className="ps5-glyph-triangle">△</span>
-                <span className="ps5-glyph-square">◻</span>
+                <span className="ps5-glyph-square">◻︎</span>
               </div>
               <h1 className="font-orbitron text-[clamp(2.75rem,7vw,6rem)] font-bold leading-none tracking-tight">
                 NEON BAY
@@ -582,7 +588,7 @@ export default function GamePage() {
                   event.stopPropagation()
                   wakeUpFromStandby()
                 }}
-                className="mt-14 min-h-12 rounded-full border border-white/20 bg-white/5 px-5 py-4 text-[10px] font-medium tracking-wider text-white transition-colors hover:border-[#9ffcff]/60 hover:bg-white/10 motion-safe:animate-[neon-pulse_3.5s_ease-in-out_infinite] focus-visible:animate-none sm:px-8 sm:text-xs"
+                className="mt-14 min-h-12 rounded-full border border-white/20 bg-white/5 px-5 py-4 text-[10px] font-medium tracking-wider text-white transition-colors hover:border-[#9ffcff]/60 hover:bg-white/10 motion-safe:animate-[neon-pulse_3.5s_ease-in-out_infinite] sm:px-8 sm:text-xs"
               >
                 PRESS [✕ / ENTER] TO INITIALIZE
               </button>
@@ -634,6 +640,10 @@ export default function GamePage() {
                   <span className="mt-6 inline-block rounded border border-white/10 px-3 py-1.5 text-[10px] tracking-wider text-slate-300">
                     1 PLAYER · FPS · WAVE SURVIVAL
                   </span>
+                  <dl aria-label="Personal records" className="mt-5 flex flex-wrap gap-x-8 gap-y-2 font-tech text-sm text-slate-300">
+                    <div className="flex items-baseline gap-3"><dt>HIGH SCORE</dt><dd className="tabular-nums text-[#9ffcff]">{profile.highScore.toLocaleString()}</dd></div>
+                    <div className="flex items-baseline gap-3"><dt>MAX WAVE</dt><dd className="tabular-nums text-[#9ffcff]">{profile.maxWave}</dd></div>
+                  </dl>
 
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <button
@@ -652,7 +662,7 @@ export default function GamePage() {
                       aria-haspopup="dialog"
                       className="ps5-sec-btn flex min-h-12 items-center gap-2 rounded-full px-5 py-3 text-xs tracking-wider"
                     >
-                      <span className="ps5-glyph-square text-lg" aria-hidden="true">◻</span> CONTROLS & TACTICS
+                      <span className="ps5-glyph-square text-lg" aria-hidden="true">◻︎</span> CONTROLS & TACTICS
                     </button>
                     <button
                       type="button"
@@ -677,7 +687,7 @@ export default function GamePage() {
                 <section aria-label="Activities" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                   {[
                     { title: 'WAVE SURVIVAL', detail: 'ENDLESS WAVES', glyph: '✕', color: 'ps5-glyph-cross' },
-                    { title: 'ARSENAL LOADOUT', detail: 'PULSE RIFLE + EAGLE', glyph: '◻', color: 'ps5-glyph-square' },
+                    { title: 'ARSENAL LOADOUT', detail: 'PULSE RIFLE + EAGLE', glyph: '◻︎', color: 'ps5-glyph-square' },
                     { title: 'STREAK TARGET', detail: '×5 CARNAGE', glyph: '△', color: 'ps5-glyph-triangle' },
                   ].map(({ title, detail, glyph, color }) => (
                     <article key={title} className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
@@ -693,7 +703,7 @@ export default function GamePage() {
               <footer className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/10 pt-5 text-[11px] text-slate-300">
                 <span><span className="ps5-glyph-cross" aria-hidden="true">✕</span> Play</span>
                 <span aria-hidden="true">·</span>
-                <span><span className="ps5-glyph-square" aria-hidden="true">◻</span> Controls</span>
+                <span><span className="ps5-glyph-square" aria-hidden="true">◻︎</span> Controls</span>
                 <span aria-hidden="true">·</span>
                 <span><span className="ps5-glyph-triangle" aria-hidden="true">△</span> Audio Mode</span>
                 <span aria-hidden="true">·</span>
@@ -787,6 +797,10 @@ export default function GamePage() {
                 <div className="font-orbitron text-2xl font-black text-[#ffe191]">×{hud.bestCombo}</div>
               </div>
             </div>
+            <dl aria-label="Personal records" className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 font-tech text-sm text-white/80">
+              <div className="flex items-baseline gap-2"><dt>HIGH SCORE</dt><dd className="tabular-nums text-[#9ffcff]">{profile.highScore.toLocaleString()}</dd></div>
+              <div className="flex items-baseline gap-2"><dt>MAX WAVE</dt><dd className="tabular-nums text-[#9ffcff]">{profile.maxWave}</dd></div>
+            </dl>
             <button
               onClick={() => engineRef.current?.restart()}
               className="neon-btn mt-8 w-full rounded-xl px-10 py-4 font-orbitron text-lg font-bold italic"

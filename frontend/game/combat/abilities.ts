@@ -19,6 +19,7 @@ export interface AbilityHost extends CombatHost {
   groundHeight(): number
   setVerticalVelocity(velocity: number): void
   setInvulnerable(active: boolean): void
+  onSlam?(): void
 }
 
 interface Effect {
@@ -195,6 +196,7 @@ export class AbilitySystem {
     this.effects.push({ line: wave, life: 0.5, total: 0.5, radius: 14 * impact.radius / 12 })
     this.host.addShake(1)
     this.host.sfx.slamImpact()
+    this.host.onSlam?.()
     this.host.particles.burst(at, new THREE.Color(GOLD), 60, 16, 0.6)
     for (const enemy of [...this.director.enemies]) {
       if (enemy.parts.group.position.distanceTo(this.host.playerPos()) > impact.radius) continue
@@ -229,7 +231,7 @@ export class AbilitySystem {
       from.copy(position)
       intended.copy(position).addScaledVector(this.dashVelocity, dt / steps)
       position.copy(intended)
-      resolveWalls(this.host.walls(), position, 0.55, position.y)
+      resolveWalls(this.host.walls(), position, 0.55, position.y - 1.8)
       position.x = THREE.MathUtils.clamp(position.x, -60, 60)
       position.z = THREE.MathUtils.clamp(position.z, -400, 400)
       this.dashDistance += position.distanceTo(from)

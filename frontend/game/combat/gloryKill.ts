@@ -153,7 +153,7 @@ export class GloryKillSystem {
     for (let i = 0; i <= steps; i++) {
       sample.lerpVectors(from, to, i / steps)
       resolved.copy(sample)
-      resolveWalls(host.walls(), resolved, 0.55, resolved.y)
+      resolveWalls(host.walls(), resolved, 0.55, resolved.y - 1.8)
       if (sample.distanceToSquared(resolved) > 0.000001) return false
     }
     return true

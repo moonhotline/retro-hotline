@@ -260,7 +260,7 @@ export class WaveDirector {
       outerMat.color.setHex(color)
       e.parts.core.material.color.setHex(color)
       g.position.addScaledVector(dir, e.speed * 0.15 * dt)
-      resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y)
+      resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y - e.radius)
       g.lookAt(pp)
       // Staggered drones cannot shoot or detonate on contact with the player.
       return
@@ -393,7 +393,7 @@ export class WaveDirector {
     }
 
     // Keep enemies out of walls
-    resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y)
+    resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y - e.radius)
 
     g.lookAt(pp)
   }

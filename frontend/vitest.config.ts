@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     name: 'frontend',
     pool: 'threads',
-    execArgv: ["--permission","--allow-fs-read=frontend","--allow-fs-read=backend","--allow-fs-read=node_modules","--allow-fs-read=vitest.config.mjs","--allow-fs-read=package.json","--allow-fs-read=pnpm-workspace.yaml","--allow-fs-read=public"],
+    execArgv: ["--permission","--allow-fs-read=frontend","--allow-fs-read=backend","--allow-fs-read=node_modules","--allow-fs-read=vitest.config.mjs","--allow-fs-read=package.json","--allow-fs-read=pnpm-workspace.yaml","--allow-fs-read=public","--allow-fs-read=/Users/alexander/develop"],
     maxWorkers: 1,
     includeTaskLocation: true,
     globals: false,

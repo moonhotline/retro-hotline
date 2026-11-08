@@ -15,6 +15,8 @@ export interface Wall {
   hw: number
   hd: number
   h: number
+  /** World-space underside; omitted for walls rising from the ground. */
+  bottom?: number
 }
 
 export interface WalkRect {
@@ -28,9 +30,13 @@ export interface WalkRect {
 export interface Zones {
   walls: Wall[]
   walkRects: WalkRect[]
-  pads: THREE.Vector3[]
+  pads: JumpPad[]
   update: (t: number) => void
   randomSpawnPoint: (playerPos: THREE.Vector3) => THREE.Vector3
+}
+
+export interface JumpPad extends THREE.Vector3 {
+  boost: THREE.Vector3
 }
 
 /** Push a circular body out of every wall box it overlaps (below wall height). */
@@ -41,6 +47,7 @@ export function resolveWalls(
   belowHeight: number
 ): void {
   for (const w of walls) {
+    if (w.bottom !== undefined && pos.y + r < w.bottom) continue
     if (pos.y > w.h - 0.2 && belowHeight > w.h - 0.2) continue
     const cx = THREE.MathUtils.clamp(pos.x, w.x - w.hw, w.x + w.hw)
     const cz = THREE.MathUtils.clamp(pos.z, w.z - w.hd, w.z + w.hd)
@@ -110,7 +117,9 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     { x0: -26, x1: 26, z0: 284, z1: 380, top: 0.6 }, // north courtyard
     { x0: 8, x1: 24, z0: 300, z1: 360, top: 7 }, // warehouse roof
   ]
-  const pads: THREE.Vector3[] = [new THREE.Vector3(16, 0.6, 292)]
+  const pad = (x: number, z: number, velocity: number): JumpPad =>
+    Object.assign(new THREE.Vector3(x, 0.6, z), { boost: new THREE.Vector3(0, velocity, 0) })
+  const pads: JumpPad[] = [pad(16, 292, 20), pad(0, -135, 23), pad(0, 135, 23), pad(0, -12, 20)]
   const pulse: Array<{ mat: THREE.LineBasicMaterial; base: number; speed: number }> = []
 
   const addWall = (
@@ -133,6 +142,53 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
       scene.add(e)
     }
   }
+
+  // Suspended platforms have thin collision slabs, leaving the road underneath open.
+  const gantry = (z: number, top: number, name: string, color: number) => {
+    walkRects.push({ x0: -6, x1: 6, z0: z - 6, z1: z + 6, top })
+    const slab = ghostBox(12, 0.45, 12)
+    slab.name = `${name}-deck`
+    slab.position.set(0, top - 0.225, z)
+    scene.add(slab)
+    collidables.push(slab)
+    walls.push({ x: 0, z, hw: 6, hd: 6, h: top, bottom: top - 0.45 })
+    const rim = edgeBox(12, 0.45, 12, color)
+    rim.position.copy(slab.position)
+    scene.add(rim)
+
+    const lines: number[] = []
+    for (const x of [-6, 6]) {
+      // Open ends let players enter from the jump pads and drop back onto the road.
+      walls.push({ x, z, hw: 0.1, hd: 6, h: top + 1.1, bottom: top })
+      for (const y of [top + 0.55, top + 1.1]) lines.push(x, y, z - 6, x, y, z + 6)
+      for (let dz = -6; dz <= 6; dz += 3) lines.push(x, top, z + dz, x, top + 1.1, z + dz)
+      for (const dz of [-6, 6]) {
+        const strut = edgeBox(0.5, top - 0.6, 0.5, color)
+        strut.position.set(x, (top + 0.6) / 2, z + dz)
+        scene.add(strut)
+        const solid = ghostBox(0.5, top - 0.6, 0.5)
+        solid.position.copy(strut.position)
+        scene.add(solid)
+        collidables.push(solid)
+        walls.push({ x, z: z + dz, hw: 0.25, hd: 0.25, h: top })
+      }
+      lines.push(x, 0.6, z - 6, x, top - 0.45, z + 6)
+      lines.push(x, 0.6, z + 6, x, top - 0.45, z - 6)
+    }
+    for (let offset = -4; offset <= 4; offset += 2) {
+      lines.push(-6, top + 0.02, z + offset, 6, top + 0.02, z + offset)
+      lines.push(offset, top + 0.02, z - 6, offset, top + 0.02, z + 6)
+    }
+    const frame = new THREE.LineSegments(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(lines, 3)),
+      new THREE.LineBasicMaterial({ color })
+    )
+    frame.name = `${name}-frame`
+    scene.add(frame)
+  }
+  gantry(-120, 8.5, 'south-tower-gantry', 0x00f0ff)
+  gantry(120, 8.5, 'north-tower-gantry', 0x00f0ff)
+  gantry(0, 6, 'mid-bridge-skybridge', 0xff2975)
 
   /** Dim violet floor grid with a bright perimeter outline. */
   const floorGrid = (
@@ -279,8 +335,8 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   signGlow.position.set(16, 4.6, 299)
   scene.add(signGlow)
 
-  // ---- Jump pad (launches onto the warehouse roof) ----
-  {
+  // ---- Jump pads: pulsing rings and vertical launch arrows ----
+  for (const pad of pads) {
     const g = new THREE.Group()
     const ringPts: THREE.Vector3[] = []
     for (let i = 0; i < 24; i++) {
@@ -291,19 +347,20 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPts), ringMat)
     const arrow = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.1, 1), new THREE.Vector3(0, 0.1, -1),
-        new THREE.Vector3(0, 0.1, -1), new THREE.Vector3(-0.5, 0.1, -0.2),
-        new THREE.Vector3(0, 0.1, -1), new THREE.Vector3(0.5, 0.1, -0.2),
+        new THREE.Vector3(0, 0.1, 0), new THREE.Vector3(0, 1.8, 0),
+        new THREE.Vector3(0, 1.8, 0), new THREE.Vector3(-0.5, 1.2, 0),
+        new THREE.Vector3(0, 1.8, 0), new THREE.Vector3(0.5, 1.2, 0),
       ]),
       ringMat
     )
     arrow.rotation.x = 0
     g.add(ring, arrow)
-    g.position.set(16, 0.66, 292)
+    g.name = 'jump-pad'
+    g.position.copy(pad).add(new THREE.Vector3(0, 0.06, 0))
     scene.add(g)
     pulse.push({ mat: ringMat, base: 1, speed: 3 })
     const padGlow = makeGlowSprite(0x00f0ff, 4.5, 0.4)
-    padGlow.position.set(16, 1.4, 292)
+    padGlow.position.copy(pad).add(new THREE.Vector3(0, 0.8, 0))
     scene.add(padGlow)
   }
 
@@ -321,6 +378,15 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     scene.add(b)
   }
 
+  // Drones fly; lift spawn centers above overlapping cover with room for the boss.
+  const clearSpawn = (p: THREE.Vector3): THREE.Vector3 => {
+    for (const wall of walls) {
+      if (Math.abs(p.x - wall.x) <= wall.hw + 2.5 && Math.abs(p.z - wall.z) <= wall.hd + 2.5) {
+        p.y = Math.max(p.y, wall.h + 2.6)
+      }
+    }
+    return p
+  }
   const randomSpawnPoint = (playerPos: THREE.Vector3): THREE.Vector3 => {
     const candidates: THREE.Vector3[] = []
     for (const r of walkRects) {
@@ -328,7 +394,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
         const x = r.x0 + 2 + Math.random() * Math.max(r.x1 - r.x0 - 4, 1)
         const z = r.z0 + 2 + Math.random() * Math.max(r.z1 - r.z0 - 4, 1)
         const y = r.top + 2 + Math.random() * 8
-        const p = new THREE.Vector3(x, y, z)
+        const p = clearSpawn(new THREE.Vector3(x, y, z))
         const d = p.distanceTo(playerPos)
         if (d > 28 && d < 85) candidates.push(p)
       }
@@ -336,11 +402,8 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     if (candidates.length > 0) {
       return candidates[Math.floor(Math.random() * candidates.length)] as THREE.Vector3
     }
-    return new THREE.Vector3(
-      THREE.MathUtils.randFloatSpread(30),
-      6,
-      playerPos.z > 0 ? playerPos.z - 45 : playerPos.z + 45
-    )
+    const z = THREE.MathUtils.clamp(playerPos.z + (playerPos.z > 0 ? -45 : 45), -378, 378)
+    return clearSpawn(new THREE.Vector3(0, Math.max(4, playerPos.y + 2), z))
   }
 
   return {

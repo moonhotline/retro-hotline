@@ -4,6 +4,9 @@ import { GameEngine } from './engine'
 import { DRONE_STATS, makeDrone, WEAPONS } from './effects'
 import type { Enemy } from './waves'
 import { GLORY_KILL_BANNER } from './combat/gloryKill'
+import { buildZones } from './map'
+import { loadProfile, saveProfile } from './combat/storage'
+import { installTestStorage } from './testStorage'
 
 // Keep combat, movement, pickups and input real; replace only GPU/audio/environment setup.
 vi.mock('three', async (importOriginal) => ({
@@ -27,11 +30,21 @@ vi.mock('./environment', () => ({
   }),
 }))
 vi.mock('./music', () => ({
-  SynthMusic: class { start() {} setIntensity() {} dispose() {} debugState() { return {} } },
+  SynthMusic: class {
+    start = vi.fn()
+    setIntensity = vi.fn()
+    setVolume = vi.fn()
+    setMuted = vi.fn()
+    setComboRank = vi.fn()
+    triggerFilterDrop = vi.fn()
+    dispose = vi.fn()
+    debugState = vi.fn(() => ({}))
+  },
 }))
 
 let engine: GameEngine
 beforeEach(() => {
+  installTestStorage()
   vi.stubGlobal('requestAnimationFrame', () => 1)
   vi.stubGlobal('cancelAnimationFrame', () => {})
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -396,5 +409,124 @@ describe('engine neon hack integration', () => {
     key('KeyE')
     expect(engine.stats().kills).toBe(0)
     expect(engine['director'].enemies).toContain(far)
+  })
+})
+
+
+describe('engine persistence and layered audio', () => {
+  it('records death once, preserving best combo, glory kills, selected hacks and audio preferences', () => {
+    saveProfile({ musicVolume: 0.25, sfxVolume: 0.2 })
+    engine.hackManager.apply('bass_drop')
+    engine['director'].wave = 3
+    target()
+    target(50, false)
+    key('KeyE')
+    const score = engine.stats().score
+    expect(engine['music'].triggerFilterDrop).toHaveBeenCalledOnce()
+    expect(engine['music'].setComboRank).toHaveBeenLastCalledWith(1)
+    engine['gloryKills'].reset()
+    engine.damagePlayer(1000)
+    expect(engine['music'].setComboRank).toHaveBeenLastCalledWith(0)
+    expect(loadProfile()).toEqual({ highScore: score, maxWave: 3, maxCombo: 1, totalKills: 1, totalGloryKills: 1,
+      unlockedHacks: ['bass_drop'], sfxVolume: 0.2, musicVolume: 0.25 })
+    expect(engine['debugApi']().profile()).toEqual(loadProfile())
+    engine.damagePlayer(1000)
+    engine.restart()
+    expect(engine.stats().gloryKills).toBe(0)
+    expect(loadProfile().totalKills).toBe(1)
+  })
+
+  it('records a living run on restart and disposal, but never records the same run twice', () => {
+    engine['kills'] = 3
+    engine['score'] = 100
+    engine.restart()
+    expect(loadProfile().totalKills).toBe(3)
+    engine['kills'] = 2
+    engine['score'] = 50
+    engine.dispose()
+    engine['finishRun']()
+    expect(loadProfile()).toMatchObject({ totalKills: 5, highScore: 100 })
+  })
+
+  it('drops the music filter once on slam impact and resets the rank when a combo expires', () => {
+    engine['grounded'] = false
+    engine.playerPos().y += 5
+    engine['abilities'].tryKineticSlam()
+    expect(engine['music'].triggerFilterDrop).not.toHaveBeenCalled()
+    engine.playerPos().y -= 5
+    engine['grounded'] = true
+    engine['abilities'].onLanding()
+    engine['abilities'].onLanding()
+    expect(engine['music'].triggerFilterDrop).toHaveBeenCalledOnce()
+    engine['combo'] = 5
+    engine['comboTimer'] = 0.01
+    tick(0.05)
+    expect(engine['music'].setComboRank).toHaveBeenLastCalledWith(0)
+  })
+})
+
+describe('engine vertical traversal', () => {
+  function arena() {
+    const collidables: THREE.Object3D[] = []
+    Object.assign(engine['env'], buildZones(engine.scene, collidables), { collidables })
+  }
+
+  it.each([[-135, -120, 8.5, Math.PI], [135, 120, 8.5, 0], [-12, 0, 6, Math.PI]] as const)(
+    'launches from z=%s and lands on its gantry', (padZ, z, top, yaw) => {
+      arena()
+      engine.playerPos().set(0, 2.4, padZ)
+      engine['yaw'] = yaw
+      tick(0.02)
+      expect(engine['vy']).toBeGreaterThan(19)
+      engine['keys'].add('KeyW')
+      let apex = 0
+      for (let i = 0; i < 160; i++) {
+        if (Math.abs(engine.playerPos().z - z) < 0.2) engine['keys'].clear()
+        tick(0.02)
+        apex = Math.max(apex, engine.playerPos().y - 1.8)
+      }
+      expect(apex).toBeGreaterThan(top)
+      expect(engine.playerPos().y).toBeCloseTo(top + 1.8)
+      expect(engine['grounded']).toBe(true)
+      engine['keys'].add('KeyD')
+      tick(0.05)
+      expect(Math.abs(engine.playerPos().x)).toBeGreaterThan(0.3)
+      expect(engine.playerPos().y).toBeCloseTo(top + 1.8)
+    }
+  )
+
+  it('walks under a platform and stops upward movement at its underside', () => {
+    arena()
+    engine.playerPos().set(0, 2.4, 0)
+    tick(0.05)
+    expect(engine.playerPos().y).toBeCloseTo(2.4)
+    engine['grounded'] = false
+    engine['vy'] = 23
+    for (let i = 0; i < 10; i++) tick(0.02)
+    expect(engine.playerPos().y).toBeLessThan(5.55)
+    expect(engine.playerPos().y).toBeGreaterThan(2.4)
+    expect(engine['vy']).toBeLessThanOrEqual(0)
+  })
+
+  it('catches a fast slam on a gantry and allows walking off its open end', () => {
+    arena()
+    engine.playerPos().set(0, 14, -120)
+    engine['grounded'] = false
+    engine['vy'] = -100
+    tick(0.05)
+    expect(engine.playerPos().y).toBeCloseTo(10.3)
+    engine['keys'].add('KeyW')
+    for (let i = 0; i < 30; i++) tick(0.05)
+    expect(engine.playerPos().z).toBeLessThan(-126)
+    expect(engine.playerPos().y).toBeCloseTo(2.4)
+  })
+
+  it('does not launch a player standing on a surface above a pad', () => {
+    arena()
+    engine['env'].walkRects.push({ x0: -2, x1: 2, z0: -137, z1: -133, top: 10 })
+    engine.playerPos().set(0, 11.8, -135)
+    tick(0.05)
+    expect(engine['grounded']).toBe(true)
+    expect(engine['vy']).toBe(0)
   })
 })

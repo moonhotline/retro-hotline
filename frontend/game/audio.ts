@@ -4,6 +4,7 @@ export class Sfx {
   private master: GainNode | null = null
   private noiseBuf: AudioBuffer | null = null
   private muted = false
+  private volume = 0.7
 
   /** Must be called from a user gesture (click) to satisfy autoplay policy. */
   resume() {
@@ -14,7 +15,7 @@ export class Sfx {
       if (!Ctor) return
       this.ctx = new Ctor()
       this.master = this.ctx.createGain()
-      this.master.gain.value = this.muted ? 0 : 0.5
+      this.master.gain.value = this.muted ? 0 : this.volume
       this.master.connect(this.ctx.destination)
       const len = Math.floor(this.ctx.sampleRate)
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
@@ -26,7 +27,13 @@ export class Sfx {
 
   setMuted(m: boolean) {
     this.muted = m
-    if (this.master) this.master.gain.value = m ? 0 : 0.5
+    if (this.master) this.master.gain.value = m ? 0 : this.volume
+  }
+
+  setVolume(v: number) {
+    if (!Number.isFinite(v)) return
+    this.volume = Math.max(0, Math.min(1, v))
+    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx!.currentTime, 0.08)
   }
 
   debugState() {

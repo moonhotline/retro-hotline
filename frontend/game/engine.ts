@@ -19,6 +19,7 @@ import { WaveDirector, type CombatHost, type Enemy, type Projectile } from './wa
 import { GLORY_KILL_BANNER, GloryKillSystem } from './combat/gloryKill'
 import { AbilitySystem } from './combat/abilities'
 import { HackManager, type HackId, type NeonHack } from './combat/modifiers'
+import { loadProfile, recordGameRun } from './combat/storage'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -144,6 +145,8 @@ export class GameEngine implements CombatHost {
   // Score / combo juice
   private score = 0
   private kills = 0
+  private gloryKillCount = 0
+  private runRecorded = true
   private combo = 0
   private comboTimer = 0
   private bestCombo = 0
@@ -172,6 +175,9 @@ export class GameEngine implements CombatHost {
   constructor(container: HTMLElement, onHud: (s: HudState) => void) {
     this.container = container
     this.onHud = onHud
+    const profile = loadProfile()
+    this.music.setVolume(profile.musicVolume)
+    this.sfx.setVolume(profile.sfxVolume)
 
     const w = container.clientWidth || 1280
     const h = container.clientHeight || 720
@@ -246,6 +252,7 @@ export class GameEngine implements CombatHost {
       health: this.health,
       score: this.score,
       kills: this.kills,
+      gloryKills: this.gloryKillCount,
       combo: this.combo,
       weapon: this.weapon,
       ammo: { ...this.ammo },
@@ -280,6 +287,7 @@ export class GameEngine implements CombatHost {
   private debugApi() {
     return {
       stats: () => this.stats(),
+      profile: () => loadProfile(),
       start: () => this.start(),
       setGod: (on: boolean) => {
         this.godMode = on
@@ -327,11 +335,12 @@ export class GameEngine implements CombatHost {
   // ---------- public API ----------
 
   start() {
+    this.finishRun()
     this.sfx.resume()
     this.music.start()
     this.started = true
-    this.setStatus('playing')
     this.resetRun()
+    this.setStatus('playing')
     this.requestLock()
     this.emit(true)
   }
@@ -355,13 +364,7 @@ export class GameEngine implements CombatHost {
   }
 
   restart() {
-    this.sfx.resume()
-    this.music.start()
-    this.started = true
-    this.setStatus('playing')
-    this.resetRun()
-    this.requestLock()
-    this.emit(true)
+    this.start()
   }
 
   toggleMute() {
@@ -372,6 +375,7 @@ export class GameEngine implements CombatHost {
   }
 
   dispose() {
+    this.finishRun()
     cancelAnimationFrame(this.rafId)
     delete (window as unknown as { __neon?: unknown }).__neon
     window.removeEventListener('resize', this.onResize)
@@ -410,7 +414,7 @@ export class GameEngine implements CombatHost {
 
   isGrounded() { return this.grounded }
 
-  groundHeight() { return this.groundAt(this.pos.x, this.pos.z, this.pos.y) }
+  groundHeight() { return this.groundAt(this.pos.x, this.pos.z, this.pos.y - EYE_OFFSET) }
 
   setVerticalVelocity(velocity: number) { this.vy = velocity }
 
@@ -475,6 +479,7 @@ export class GameEngine implements CombatHost {
     this.lastHitAt = this.gameplayTime
     this.waveDamaged = true
     this.combo = 0
+    this.music.setComboRank(this.combo)
     this.comboTimer = 0
     this.lastMult = 1
     this.addShake(0.75)
@@ -490,6 +495,7 @@ export class GameEngine implements CombatHost {
   onKill(type: DroneType, position: THREE.Vector3, byPlayer: boolean) {
     if (!byPlayer) return
     this.combo++
+    this.music.setComboRank(this.combo)
     this.comboTimer = 6
     this.bestCombo = Math.max(this.bestCombo, this.combo)
     let mult = 1
@@ -515,6 +521,8 @@ export class GameEngine implements CombatHost {
   }
 
   onGloryKill(position: THREE.Vector3) {
+    this.gloryKillCount++
+    this.music.triggerFilterDrop()
     this.hackManager.onGloryKill(position, {
       enemies: this.director.enemies,
       maxHp: (enemy) => DRONE_STATS[enemy.type].hp,
@@ -530,6 +538,10 @@ export class GameEngine implements CombatHost {
     this.hitMarkerId++
     this.hitMarkerCrit = true
     if (this.draftHacks.length > 0) this.emit(true)
+  }
+
+  onSlam() {
+    this.music.triggerFilterDrop()
   }
 
   onWaveStart(_wave: number) {
@@ -852,7 +864,7 @@ export class GameEngine implements CombatHost {
     let top = WATER_Y
     for (const r of this.env.walkRects) {
       if (x < r.x0 || x > r.x1 || z < r.z0 || z > r.z1) continue
-      if (r.top <= y + 0.7 && r.top > top) top = r.top
+      if (r.top <= y + 0.05 && r.top > top) top = r.top
     }
     return top
   }
@@ -903,8 +915,19 @@ export class GameEngine implements CombatHost {
   // ---------- helpers ----------
 
   private setStatus(s: GameStatus) {
+    if (s === 'over') this.finishRun()
     this.status = s
     this.emit(true)
+  }
+
+  private finishRun() {
+    if (!this.started || this.runRecorded) return
+    this.runRecorded = true
+    recordGameRun({
+      score: this.score, wave: this.director.wave, combo: this.bestCombo,
+      kills: this.kills, gloryKills: this.gloryKillCount,
+      activeHacks: [...this.hackManager.activeHacks],
+    })
   }
 
   private requestLock() {
@@ -985,6 +1008,7 @@ export class GameEngine implements CombatHost {
   }
 
   private resetRun() {
+    this.runRecorded = false
     this.hackManager.reset()
     this.draftHacks = []
     this.gameplayTime = 0
@@ -1012,7 +1036,9 @@ export class GameEngine implements CombatHost {
     this.tracers = []
     this.score = 0
     this.kills = 0
+    this.gloryKillCount = 0
     this.combo = 0
+    this.music.setComboRank(this.combo)
     this.comboTimer = 0
     this.bestCombo = 0
     this.lastMult = 1
@@ -1086,6 +1112,7 @@ export class GameEngine implements CombatHost {
       this.comboTimer -= dtRaw
       if (this.comboTimer <= 0) {
         this.combo = 0
+        this.music.setComboRank(this.combo)
         this.lastMult = 1
       }
     }
@@ -1144,7 +1171,7 @@ export class GameEngine implements CombatHost {
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 400)
 
     // Wall collision (only against walls taller than the player)
-    resolveWalls(this.env.walls, this.pos, 0.55, this.pos.y)
+    resolveWalls(this.env.walls, this.pos, 0.55, this.pos.y - EYE_OFFSET)
 
     // Jump / gravity with heightmap ground
     if (!dashing && this.keys.has('Space') && this.grounded) {
@@ -1154,9 +1181,21 @@ export class GameEngine implements CombatHost {
     }
     if (!dashing) this.vy -= 24 * dt
     let y = this.pos.y + (dashing ? 0 : this.vy * dt)
-    const gy = this.groundAt(this.pos.x, this.pos.z, Math.max(y, this.pos.y))
+    // Catch upward crossings of suspended slabs, including fast pad launches.
+    if (this.vy > 0) {
+      for (const wall of this.env.walls) {
+        if (wall.bottom === undefined || this.pos.y + 0.15 > wall.bottom) continue
+        if (Math.abs(this.pos.x - wall.x) > wall.hw + 0.55 || Math.abs(this.pos.z - wall.z) > wall.hd + 0.55) continue
+        if (y + 0.15 >= wall.bottom) {
+          y = wall.bottom - 0.15
+          this.vy = 0
+        }
+      }
+    }
+    // Only surfaces already below the feet can catch a falling player.
+    const gy = this.groundAt(this.pos.x, this.pos.z, this.pos.y - EYE_OFFSET)
     const groundEye = gy + EYE_OFFSET
-    if (y <= groundEye) {
+    if (this.vy <= 0 && y <= groundEye) {
       y = groundEye
       this.vy = 0
       this.grounded = true
@@ -1174,8 +1213,8 @@ export class GameEngine implements CombatHost {
       for (const pad of this.env.pads) {
         const dx = this.pos.x - pad.x
         const dz = this.pos.z - pad.z
-        if (dx * dx + dz * dz < 1.8 * 1.8) {
-          this.vy = 16.5
+        if (dx * dx + dz * dz < 1.8 * 1.8 && Math.abs(this.pos.y - EYE_OFFSET - pad.y) < 0.2) {
+          this.vy = pad.boost.y
           this.grounded = false
           this.sfx.whoosh()
           this.particles.burst(pad, SPARK_COLOR, 14, 5, 0.6)
