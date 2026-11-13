@@ -356,6 +356,25 @@ describe('engine neon hack integration', () => {
     expect(engine.stats().draftOpen).toBe(true)
   })
 
+  it('re-requests pointer lock on canvas click if lock was lost during gameplay', () => {
+    const canvas = engine['renderer'].domElement
+    canvas.requestPointerLock = vi.fn()
+    engine['lockFailed'] = true
+    engine['onContainerClick']()
+    expect(canvas.requestPointerLock).toHaveBeenCalled()
+    expect(engine['lockFailed']).toBe(false)
+  })
+
+  it('applies pitch sensitivity ratio of 1.15x relative to yaw on mouse movement', () => {
+    const canvas = engine['renderer'].domElement
+    vi.spyOn(document, 'pointerLockElement', 'get').mockReturnValue(canvas)
+    engine['yaw'] = 0
+    engine['pitch'] = 0
+    engine['onMouseMove']({ movementX: 100, movementY: 100 } as MouseEvent)
+    expect(engine['yaw']).toBeCloseTo(-0.21, 5)
+    expect(engine['pitch']).toBeCloseTo(-0.2415, 5)
+  })
+
   it('clears the build, draft and temporary buffs on restart', () => {
     engine.hackManager.apply('freeze')
     engine.hackManager.apply('attack_speed')

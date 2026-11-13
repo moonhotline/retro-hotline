@@ -33,6 +33,7 @@ const INITIAL_HUD: HudState = {
   weapon: 'rifle',
   overchargeFrac: 0,
   slideFrac: 1,
+  pointerLocked: false,
   draftOpen: false,
   draftHacks: [],
   activeHacks: [],
@@ -155,6 +156,12 @@ function Hud({ hud }: { hud: HudState }) {
       {hud.interactPrompt && (
         <div className="absolute left-1/2 top-[54%] -translate-x-1/2 rounded-lg border border-[#ffd319]/60 bg-[#060810]/90 px-4 py-1.5 font-orbitron text-xs font-black tracking-wider text-[#ffd319] shadow-[0_0_12px_rgba(255,211,25,0.4)]">
           {hud.interactPrompt}
+        </div>
+      )}
+
+      {hud.status === 'playing' && hud.pointerLocked === false && !hud.draftOpen && !hud.storyModal?.open && (
+        <div className="pointer-events-none absolute left-1/2 bottom-[24%] -translate-x-1/2 rounded-full border border-[#00f0ff]/50 bg-[#060810]/90 px-4 py-1.5 font-orbitron text-xs font-bold tracking-widest text-[#00f0ff] shadow-[0_0_16px_rgba(0,240,255,0.4)] backdrop-blur-md animate-pulse">
+          [ CLICK TO LOCK MOUSE // 点击画面锁定准星 ]
         </div>
       )}
 
@@ -417,7 +424,7 @@ export default function GamePage() {
     <div
       ref={containerRef}
       className={`relative h-dvh w-full select-none overflow-hidden bg-[#05070e] ${
-        status === 'playing' ? 'cursor-none' : 'cursor-default'
+        status === 'playing' ? (hud.pointerLocked ? 'cursor-none' : 'cursor-crosshair') : 'cursor-default'
       }`}
       onContextMenu={(e) => e.preventDefault()}
     >
