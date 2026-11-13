@@ -78,6 +78,7 @@ export interface HudState {
   roomName?: string
   isAiming?: boolean
   unlockedWeapons?: WeaponId[]
+  pointerLocked?: boolean
   storyModal?: {
     open: boolean
     entityId: string

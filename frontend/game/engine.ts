@@ -706,14 +706,17 @@ export class GameEngine implements CombatHost {
   private onLockChange = () => {
     if (this.draftHacks.length > 0) {
       if (this.isLocked()) document.exitPointerLock()
+      this.emit(true)
       return
     }
     if (this.isLocked()) {
+      this.lockFailed = false
       if (this.started && this.status === 'paused') this.setStatus('playing')
     } else {
       this.clearInput()
       if (this.status === 'playing' && !this.lockFailed) this.setStatus('paused')
     }
+    this.emit(true)
   }
 
   private onLockError = () => {
@@ -722,6 +725,7 @@ export class GameEngine implements CombatHost {
     if (this.started && this.status !== 'playing' && this.status !== 'over') {
       this.setStatus('playing')
     }
+    this.emit(true)
   }
 
   private onContextMenu = (e: MouseEvent) => {
@@ -731,14 +735,19 @@ export class GameEngine implements CombatHost {
   private onMouseMove = (e: MouseEvent) => {
     if (this.status !== 'playing') return
     if (!this.isLocked() && !this.lockFailed) return
-    const sens = this.isAiming && this.weapon === 'sniper' ? 0.00085 : 0.0021
-    this.yaw -= e.movementX * sens
-    this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * sens, -1.45, 1.45)
+    const sensX = this.isAiming && this.weapon === 'sniper' ? 0.00085 : 0.0021
+    const sensY = sensX * 1.15
+    this.yaw -= e.movementX * sensX
+    this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * sensY, -1.45, 1.45)
   }
 
   private onMouseDown = (e: MouseEvent) => {
     if (this.status !== 'playing') return
     if (e.target instanceof Element && e.target.closest('button, dialog, input, select, textarea')) return
+    if (!this.isLocked() && this.draftHacks.length === 0 && !this.levelManager.storyModal.open) {
+      this.lockFailed = false
+      this.requestLock()
+    }
     if (e.button === 0) {
       this.firing = true
       this.triggerQueued = true
@@ -826,7 +835,11 @@ export class GameEngine implements CombatHost {
   }
 
   private onContainerClick = () => {
-    if (this.status === 'paused' && this.draftHacks.length === 0) this.requestLock()
+    if (this.draftHacks.length > 0 || this.levelManager.storyModal.open) return
+    if (!this.isLocked()) {
+      this.lockFailed = false
+      this.requestLock()
+    }
   }
 
   // ---------- weapons / abilities ----------
@@ -1162,6 +1175,7 @@ export class GameEngine implements CombatHost {
       storyModal: { ...this.levelManager.storyModal },
       isAiming: this.isAiming,
       unlockedWeapons: [...this.unlockedWeapons],
+      pointerLocked: this.isLocked(),
     }
     const key = JSON.stringify(snap)
     if (force || key !== this.lastEmit) {
