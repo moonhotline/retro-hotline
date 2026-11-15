@@ -795,6 +795,7 @@ export class GameEngine implements CombatHost {
       return
     }
     if (e.code === 'Escape' && this.lockFailed && this.status === 'playing') {
+      e.preventDefault()
       this.setStatus('paused')
       return
     }
