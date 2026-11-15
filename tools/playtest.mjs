@@ -133,9 +133,10 @@ try {
   const originalTrack = (await stats()).music.trackIndex
   await page.keyboard.press('KeyN')
   const nextTrack = (await stats()).music
-  check('N changes the live synth title and BPM in media', nextTrack.trackIndex === (originalTrack + 1) % 3 && await page.locator('.console-track').innerText().then((text) => text.includes(nextTrack.trackName) && text.includes(String(nextTrack.bpm))))
+  check('N changes the live synth title and BPM in media', nextTrack.trackIndex === (originalTrack + 1) % 4 && await page.locator('.console-track').innerText().then((text) => text.includes(nextTrack.trackName) && text.includes(String(nextTrack.bpm))))
   await page.locator('.console-track-button').click()
-  check('track button cycles the same synth engine', (await stats()).music.trackIndex === (originalTrack + 2) % 3)
+  check('track button cycles the same synth engine', (await stats()).music.trackIndex === (originalTrack + 2) % 4)
+  await page.keyboard.press('KeyN')
   await page.keyboard.press('KeyN')
   await page.getByRole('button', { name: 'GAMES', exact: true }).click()
   await page.keyboard.press('KeyO')

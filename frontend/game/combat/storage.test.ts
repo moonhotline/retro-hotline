@@ -37,7 +37,7 @@ describe('player profiles', () => {
     expect(saveProfile({ highScore: 7 }).highScore).toBe(7)
   })
 
-  it.each([0, 1, 2])('persists track %s across partial updates and recorded runs', (musicTrackIndex) => {
+  it.each([0, 1, 2, 3])('persists track %s across partial updates and recorded runs', (musicTrackIndex) => {
     saveProfile({ musicTrackIndex })
     saveProfile({ musicVolume: 0.25 })
     record()
@@ -45,7 +45,7 @@ describe('player profiles', () => {
     expect(JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY)!)).toHaveProperty('musicTrackIndex', musicTrackIndex)
   })
 
-  it.each([-1, 3, 999, 1.5, NaN, Infinity, '2', null, undefined])('ignores invalid track index %s', (value) => {
+  it.each([-1, 4, 999, 1.5, NaN, Infinity, '2', null, undefined])('ignores invalid track index %s', (value) => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({ musicTrackIndex: value }))
     expect(loadProfile().musicTrackIndex).toBe(0)
     saveProfile({ musicTrackIndex: 2 })

@@ -21,6 +21,8 @@ class Source extends Node {
   detune = new Param()
   buffer: unknown = null
   loop = false
+  loopStart = 0
+  loopEnd = 0
   type = ''
   onended: (() => void) | null = null
   start = vi.fn((_time?: number) => {})
@@ -42,6 +44,7 @@ class Context {
   createBufferSource() { const source = new Source(); this.sources.push(source); return source }
   createOscillator() { return this.createBufferSource() }
   resume = vi.fn(async () => { this.state = 'running' })
+  decodeAudioData = vi.fn(async (_data: ArrayBuffer) => ({ duration: 153.6 }))
   close = vi.fn(async () => { this.state = 'closed' })
 }
 let music: SynthMusic
@@ -55,6 +58,101 @@ beforeEach(() => {
   music = new SynthMusic()
 })
 afterEach(() => { music.dispose(); vi.useRealTimers(); vi.unstubAllGlobals() })
+
+describe('studio combat suite', () => {
+  const response = () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) })
+  function studio() {
+    music.dispose()
+    music = new SynthMusic({ studioCombat: true })
+    return music
+  }
+
+  it('makes the suite the game default while keeping all procedural selections', () => {
+    studio()
+    expect(music.getTracks().map((track) => track.id)).toEqual([
+      'neon-combat-suite', ...SYNTH_TRACKS.map((track) => track.id),
+    ])
+    expect(music.getCurrentTrack()).toMatchObject({ name: 'NEON COMBAT SUITE', bpm: 125 })
+    for (const index of [1, 2, 3, 0]) {
+      music.nextTrack()
+      expect(music.getCurrentTrackIndex()).toBe(index)
+    }
+    expect(Context.instances).toHaveLength(0)
+  })
+
+  it('loads one loop, fades synthesis out, shares volume/mute/filter controls and never restarts on state changes', async () => {
+    const fetch = vi.fn(async () => response())
+    vi.stubGlobal('fetch', fetch)
+    studio().setIntensity(2)
+    music.setVolume(0.3)
+    music.start()
+    await vi.waitFor(() => expect(music.debugState().studio).toEqual({ state: 'playing', active: true }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const source = ctx().sources.find((source) => source.loopEnd === 153.6)!
+    expect(source).toBeDefined()
+    expect(source.loop).toBe(true)
+    expect(source.start).toHaveBeenCalledOnce()
+    expect(stems().map((stem) => stem.gain.value)).toEqual([0, 0, 0, 0, 0])
+    expect(ctx().filters[0]!.frequency.value).toBe(14000)
+    const count = ctx().sources.length
+    advance(1)
+    expect(ctx().sources).toHaveLength(count)
+    music.setMuted(true)
+    expect(ctx().gains[0]!.gain.value).toBe(0)
+    music.setVolume(0.2)
+    music.setIntensity(0)
+    music.setComboRank(10)
+    music.start()
+    music.setMuted(false)
+    expect(ctx().gains[0]!.gain.value).toBe(0.2)
+    music.setIntensity(3)
+    music.setTimeDilation(0.2)
+    expect(ctx().filters[0]!.frequency.value).toBeLessThan(16000)
+    music.triggerFilterDrop(200, 180)
+    expect(ctx().filters[0]!.frequency.linearRampToValueAtTime.mock.calls.at(-1)?.[0]).toBe(200)
+    music.setTrack(1)
+    expect(music.debugState().studio?.active).toBe(false)
+    expect(stems()[0]!.gain.value).toBe(0.7)
+    music.setTrack(0)
+    expect(music.debugState().studio?.active).toBe(true)
+    expect(source.start).toHaveBeenCalledOnce()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    music.dispose()
+    expect(source.stop).toHaveBeenCalledOnce()
+    expect(source.disconnect).toHaveBeenCalledOnce()
+    expect(ctx().gains.every((node) => node.disconnect.mock.calls.length === 1)).toBe(true)
+  })
+
+  it.each(['http', 'decode'])('keeps synthesis running when studio %s fails', async (failure) => {
+    vi.stubGlobal('fetch', vi.fn(async () => failure === 'http' ? { ok: false, status: 404 } : response()))
+    studio().setIntensity(2)
+    music.start()
+    if (failure === 'decode') ctx().decodeAudioData.mockRejectedValueOnce(new Error('Unsupported audio'))
+    await vi.waitFor(() => expect(music.debugState().studio).toEqual({ state: 'failed', active: false }))
+    expect(stems()[0]!.gain.value).toBe(0.7)
+    const play = vi.spyOn(music as any, 'playStep')
+    advance(0.2)
+    expect(play).toHaveBeenCalled()
+  })
+
+  it('aborts pending loading on disposal and ignores late decode completion', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response()))
+    studio()
+    let complete!: (value: { duration: number }) => void
+    music.start()
+    ctx().decodeAudioData.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve }))
+    await vi.waitFor(() => expect(complete).toBeTypeOf('function'))
+    const count = ctx().sources.length
+    const signal = vi.mocked(fetch).mock.calls[0]![1]!.signal!
+    music.dispose()
+    expect(signal.aborted).toBe(true)
+    complete({ duration: 153.6 })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(ctx().sources).toHaveLength(count)
+    expect(music.debugState()).toMatchObject({ disposed: true, studio: null })
+  })
+})
 
 describe('procedural track selection', () => {
   it('lists three distinct tracks and returns metadata without exposing mutable track definitions', () => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PlayerProfile } from '../game/combat/storage'
-import { SYNTH_TRACKS } from '../game/music'
+import { MUSIC_TRACKS } from '../game/music'
 import type { HudState } from '../game/types'
 import './ConsoleMenu.css'
 
@@ -64,7 +64,7 @@ function ControllerStatus({ state }: { state: ReturnType<typeof useConsoleContro
   )
 }
 
-export function TrackBadge({ name = 'BAY BRIDGE RUNNER', bpm = 116 }: { name?: string; bpm?: number }) {
+export function TrackBadge({ name = 'NEON COMBAT SUITE', bpm = 125 }: { name?: string; bpm?: number }) {
   return (
     <span className="console-track" role="status" aria-live="polite" aria-atomic="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 10v4m4-7v10m5-14v18m5-14v10m4-7v4" /></svg>
@@ -77,7 +77,7 @@ const CONTROL_GROUPS = [
   { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide · ground only', 'C / CTRL']] },
   { title: 'COMBAT', rows: [['Full-auto rifle · hold', 'LMB'], ['Punch / close execution', 'RMB / F'], ['Glory shatter · staggered target', 'E'], ['Reload / swap weapon', 'R / Q']] },
   { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Wall run / climb · air near wall', 'SPACE'], ['Tactical slide', 'C / CTRL']] },
-  { title: 'AUDIO & SYSTEM', rows: [['Cycle synth track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
+  { title: 'AUDIO & SYSTEM', rows: [['Cycle music track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
 ]
 
 function ControlsGrid() {
@@ -252,10 +252,10 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
                 </section>
               </>
             ) : (
-              <section className="console-media" aria-labelledby="console-media-title"><p className="console-eyebrow">PROCEDURAL WEBAUDIO / 5 STEMS</p><h1 id="console-media-title" className="font-orbitron">THE FREQUENCY<br />OF THE CITY.</h1><p>Three synth tracks. One continuous mix.</p><ol>{SYNTH_TRACKS.map((track, i) => <li key={track.id} aria-current={track.name === hud.musicTrackName ? 'true' : undefined}><span className="media-number">0{i + 1}</span><div><h2>{track.name}</h2><p>{track.genre}</p></div><span>{track.bpm} BPM</span><span className="media-playing">{track.name === hud.musicTrackName ? 'SELECTED' : '—'}</span></li>)}</ol><div className="console-actions"><button type="button" className="console-primary" onClick={onTrack}>[N] NEXT TRACK</button><button type="button" className="console-secondary" aria-pressed={!hud.muted} onClick={onAudio}>AUDIO: {hud.muted ? 'OFF' : 'ON'}</button><button type="button" className="console-secondary" onClick={() => setSection('games')}>○ BACK TO GAMES</button></div></section>
+              <section className="console-media" aria-labelledby="console-media-title"><p className="console-eyebrow">ORIGINAL SOUNDTRACKS</p><h1 id="console-media-title" className="font-orbitron">THE FREQUENCY<br />OF THE CITY.</h1><p>One combat suite. Three synth tracks.</p><ol>{MUSIC_TRACKS.map((track, i) => <li key={track.id} aria-current={track.name === hud.musicTrackName ? 'true' : undefined}><span className="media-number">0{i + 1}</span><div><h2>{track.name}</h2><p>{track.genre}</p></div><span>{track.bpm} BPM</span><span className="media-playing">{track.name === hud.musicTrackName ? 'SELECTED' : '—'}</span></li>)}</ol><div className="console-actions"><button type="button" className="console-primary" onClick={onTrack}>[N] NEXT TRACK</button><button type="button" className="console-secondary" aria-pressed={!hud.muted} onClick={onAudio}>AUDIO: {hud.muted ? 'OFF' : 'ON'}</button><button type="button" className="console-secondary" onClick={() => setSection('games')}>○ BACK TO GAMES</button></div></section>
             )}
           </main>
-          <footer className="console-footer"><span>KEYBOARD + MOUSE COMBAT<span className="footer-divider">/</span>CONTROLLER CONSOLE NAVIGATION</span><button type="button" onClick={onTrack} aria-keyshortcuts="N" className="console-track-button" aria-label={`Next track, currently ${hud.musicTrackName ?? 'BAY BRIDGE RUNNER'}, ${hud.musicTrackBpm ?? 116} BPM`}><kbd>N</kbd><span>TRACK:</span><TrackBadge name={hud.musicTrackName} bpm={hud.musicTrackBpm} /></button></footer>
+          <footer className="console-footer"><span>KEYBOARD + MOUSE COMBAT<span className="footer-divider">/</span>CONTROLLER CONSOLE NAVIGATION</span><button type="button" onClick={onTrack} aria-keyshortcuts="N" className="console-track-button" aria-label={`Next track, currently ${hud.musicTrackName ?? 'NEON COMBAT SUITE'}, ${hud.musicTrackBpm ?? 125} BPM`}><kbd>N</kbd><span>TRACK:</span><TrackBadge name={hud.musicTrackName} bpm={hud.musicTrackBpm} /></button></footer>
         </div>
       )}
       <dialog ref={dialogRef} aria-labelledby="console-controls-title" className="console-dialog backdrop:bg-black/75 backdrop:backdrop-blur-md" onCancel={(e) => { e.preventDefault(); setControls(false) }} onClose={() => setControls(false)} onClick={(e) => { if (e.target === e.currentTarget) { const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) setControls(false) } }}>

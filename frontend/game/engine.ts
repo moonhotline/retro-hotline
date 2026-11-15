@@ -82,7 +82,7 @@ export class GameEngine implements CombatHost {
   private env: ReturnType<typeof buildEnvironment>
   particles: Particles
   sfx = new Sfx()
-  private music = new SynthMusic()
+  private music = new SynthMusic({ studioCombat: true })
   private gunRig: ReturnType<typeof buildGun>
   private director: WaveDirector
   private gloryKills: GloryKillSystem

@@ -6,6 +6,8 @@
  * between menu, intermission and combat states.
  */
 
+import { StudioLoop } from './studioLoop'
+
 type Intensity = 0 | 1 | 2 | 3
 
 export const MUSIC_CREDIT = 'Original Cyberpunk Synth Tracks — generated live with WebAudio'
@@ -91,10 +93,17 @@ export const SYNTH_TRACKS: ReadonlyArray<Readonly<SynthTrack>> = [
 
 const FILTER_CUT: ReadonlyArray<number> = [420, 900, 2600, 6500]
 
+export const STUDIO_TRACK: Readonly<SynthTrackInfo> = {
+  id: 'neon-combat-suite', name: 'NEON COMBAT SUITE', genre: 'Warm Arp / Synthwave / Trap', bpm: 125,
+}
+export const MUSIC_TRACKS: ReadonlyArray<Readonly<SynthTrackInfo>> = [STUDIO_TRACK, ...SYNTH_TRACKS]
+
 type Stem = 'pad' | 'drum' | 'bass' | 'arp' | 'lead'
 type Mix = Record<Stem, number>
 
 export class SynthMusic {
+  private readonly studioCombat: boolean
+  private studio: StudioLoop | null = null
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private lp: BiquadFilterNode | null = null
@@ -120,6 +129,15 @@ export class SynthMusic {
   private filterDropHz = 360
   private timeDilation = 1.0
 
+  constructor(options: { studioCombat?: boolean } = {}) {
+    this.studioCombat = options.studioCombat ?? false
+    if (this.studioCombat) this.step16 = 60 / STUDIO_TRACK.bpm / 4
+  }
+
+  private trackList(): ReadonlyArray<Readonly<SynthTrackInfo>> {
+    return this.studioCombat ? MUSIC_TRACKS : SYNTH_TRACKS
+  }
+
   setTimeDilation(scale: number): void {
     if (!Number.isFinite(scale)) return
     this.timeDilation = Math.max(0.05, Math.min(1.0, scale))
@@ -127,11 +145,11 @@ export class SynthMusic {
   }
 
   getTracks(): SynthTrackInfo[] {
-    return SYNTH_TRACKS.map(({ id, name, genre, bpm }) => ({ id, name, genre, bpm }))
+    return this.trackList().map(({ id, name, genre, bpm }) => ({ id, name, genre, bpm }))
   }
 
   getCurrentTrack(): SynthTrackInfo {
-    const { id, name, genre, bpm } = SYNTH_TRACKS[this.currentTrackIndex]!
+    const { id, name, genre, bpm } = this.trackList()[this.currentTrackIndex]!
     return { id, name, genre, bpm }
   }
 
@@ -141,9 +159,12 @@ export class SynthMusic {
 
   setTrack(index: number): void {
     if (!Number.isFinite(index)) return
-    const length = SYNTH_TRACKS.length
+    const length = this.trackList().length
     this.currentTrackIndex = ((Math.trunc(index) % length) + length) % length
-    this.step16 = 60 / SYNTH_TRACKS[this.currentTrackIndex]!.bpm / 4
+    this.step16 = 60 / this.getCurrentTrack().bpm / 4
+    this.studio?.setEnabled(this.currentTrackIndex === 0)
+    this.applyMix()
+    this.applyFilter()
     // Keep the next unscheduled beat and musical phase intact. Already queued
     // voices finish naturally; subsequent beats use the new tempo on this clock.
   }
@@ -181,6 +202,15 @@ export class SynthMusic {
       this.leadGain = stem()
       this.applyMix(true)
 
+      if (this.studioCombat) {
+        this.studio = new StudioLoop(this.ctx, this.lp, () => {
+          this.applyMix()
+          this.applyFilter()
+        })
+        this.studio.setIntensity(this.intensity)
+        this.studio.setEnabled(this.currentTrackIndex === 0)
+      }
+
       const len = Math.floor(this.ctx.sampleRate)
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
       const data = this.noiseBuf.getChannelData(0)
@@ -211,6 +241,7 @@ export class SynthMusic {
   setIntensity(i: Intensity) {
     if (i === this.intensity) return
     this.intensity = i
+    this.studio?.setIntensity(i)
     this.applyMix()
     this.applyFilter()
   }
@@ -243,6 +274,8 @@ export class SynthMusic {
   dispose() {
     if (this.disposed) return
     this.disposed = true
+    this.studio?.dispose()
+    this.studio = null
     this.unlocked = false
     if (typeof window !== 'undefined') window.clearInterval(this.timer)
     this.timer = 0
@@ -271,6 +304,7 @@ export class SynthMusic {
       stems: this.mix(), cutoff: FILTER_CUT[this.intensity]!,
       filterDropping: !!this.ctx && this.ctx.currentTime < this.filterDropUntil,
       activeSources: this.sources.size, disposed: this.disposed,
+      studio: this.studio?.debugState() ?? null,
     }
   }
 
@@ -279,6 +313,7 @@ export class SynthMusic {
   }
 
   private mix(): Mix {
+    if (this.studio?.active) return { pad: 0, drum: 0, bass: 0, arp: 0, lead: 0 }
     const active = this.intensity > 0
     return {
       pad: active ? 0.7 : 1,
@@ -317,7 +352,7 @@ export class SynthMusic {
     if (!this.ctx || !this.lp) return
     const now = this.ctx.currentTime
     const frequency = this.lp.frequency
-    const baseTarget = FILTER_CUT[this.intensity]!
+    const baseTarget = this.studio?.active ? [420, 1200, 14000, 16000][this.intensity]! : FILTER_CUT[this.intensity]!
     const target = baseTarget * (0.12 + 0.88 * Math.pow(this.timeDilation, 1.4))
     this.hold(frequency, now)
     if (now < this.filterDropUntil) {
@@ -338,7 +373,7 @@ export class SynthMusic {
       this.nextT += missed * this.step16
     }
     while (this.nextT < this.ctx.currentTime + 0.16) {
-      this.playStep(this.step, this.nextT)
+      if (!this.studio?.active) this.playStep(this.step, this.nextT)
       this.step++
       this.nextT += this.step16
     }
@@ -431,7 +466,7 @@ export class SynthMusic {
   }
 
   private playStep(step: number, t: number) {
-    const track = SYNTH_TRACKS[this.currentTrackIndex]!
+    const track = SYNTH_TRACKS[this.studioCombat ? Math.max(0, this.currentTrackIndex - 1) : this.currentTrackIndex]!
     const s16 = step % 16
     const bar = Math.floor(step / 16) % 4
     const section = Math.floor(step / 64) % 2

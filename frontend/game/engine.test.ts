@@ -488,19 +488,21 @@ describe('engine persistence and layered audio', () => {
     expect(engine['music'].getCurrentTrackIndex()).toBe(1)
     expect(loadProfile()).toMatchObject({ musicTrackIndex: 1, musicVolume: 0.25, highScore: 500 })
     expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({
-      musicTrackName: 'HOTLINE MIDNIGHT', musicTrackBpm: 128, banner: 'TRACK // HOTLINE MIDNIGHT [128 BPM]',
+      musicTrackName: 'BAY BRIDGE RUNNER', musicTrackBpm: 116, banner: 'TRACK // BAY BRIDGE RUNNER [116 BPM]',
     }))
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', repeat: true }))
     expect(engine['music'].getCurrentTrackIndex()).toBe(1)
     key('KeyN')
     expect(engine['music'].getCurrentTrackIndex()).toBe(2)
     key('KeyN')
+    expect(engine['music'].getCurrentTrackIndex()).toBe(3)
+    key('KeyN')
     expect(engine['music'].getCurrentTrackIndex()).toBe(0)
     key('KeyN')
     engine.dispose()
     engine = new GameEngine(document.createElement('div'), onHud)
     expect(engine['music'].getCurrentTrackIndex()).toBe(1)
-    expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({ musicTrackName: 'HOTLINE MIDNIGHT' }))
+    expect(onHud).toHaveBeenLastCalledWith(expect.objectContaining({ musicTrackName: 'BAY BRIDGE RUNNER' }))
   })
 
   it.each(['menu', 'paused', 'over'] as const)('allows track selection in %s', (status) => {
