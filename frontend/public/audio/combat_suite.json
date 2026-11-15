@@ -1,0 +1,55 @@
+{
+  "bpm": 125,
+  "bars": 80,
+  "duration": 153.6,
+  "target_lufs": -14.0,
+  "sample_rate": 44100,
+  "channels": 2,
+  "bits_per_sample": 16,
+  "inputs": [
+    {
+      "file": "bgm_combat_warm_arp_rework_125bpm_61s.wav",
+      "sha256": "c9d0c8c1d2d502a3c45ca97818f26c5a49269caa1c62e056f4e2e33b24b95302",
+      "duration": 61.44,
+      "input_lufs": -14.2,
+      "gain_db": 0.2
+    },
+    {
+      "file": "bgm_combat.wav",
+      "sha256": "b2329b979046bad619ca3df7ae0d220d4ca28a99b2ee9395ca4cf0770474a236",
+      "duration": 30.72,
+      "input_lufs": -13.9,
+      "gain_db": -0.1
+    },
+    {
+      "file": "bgm_combat_signature_trap_v2_125bpm_61s.wav",
+      "sha256": "5e319356fb91ec7b4907b683af0646502efaeb3dad53e18999ce7556f6198294",
+      "duration": 61.44,
+      "input_lufs": -12.3,
+      "gain_db": -1.7
+    }
+  ],
+  "master_gain_db": 0.0,
+  "seam": 0.0032958984375,
+  "transitions": [
+    {
+      "time": 0.0,
+      "duration": 0.96,
+      "sample_jump": 0.0032958984375
+    },
+    {
+      "time": 61.44,
+      "duration": 0.96,
+      "sample_jump": 0.011260986328125
+    },
+    {
+      "time": 92.16,
+      "duration": 0.96,
+      "sample_jump": 0.004638671875
+    }
+  ],
+  "sha256": {
+    "bgm_combat.wav": "e313d8cf4c5f87550413db5d8bf918067e3646f473bdd697c5863eadc769c0a5",
+    "bgm_combat.ogg": "a14102ad5d7eaed0397df4cb8de8a1cf8766232c0d14a996580714bd9036ff0a"
+  }
+}
