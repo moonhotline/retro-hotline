@@ -4,8 +4,10 @@
     python3 tools/generate_audio.py
     python3 tools/generate_audio.py --verify-only
 
-Menu uses sixteen complete 4/4 bars (38.40 s at 100 BPM). Combat is the approved
-80-bar studio suite (153.60 s at 125 BPM); rebuild it with compose_combat_bgm.py.
+Combat is the approved 80-bar studio suite (153.60 s at 125 BPM);
+rebuild it with compose_combat_bgm.py.
+The menu master is the approved 22-bar Mist track (50.29 s at 105 BPM).
+Both studio masters are preserved by this generator.
 Note releases and effect returns wrap onto the beginning of each loop, including
 the mastering filter state. No fade-to-silence is applied to the music seam.
 SFX are mono for positional playback; music is true stereo with centered bass.
@@ -25,7 +27,7 @@ TAU = 2.0 * math.pi
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "frontend/public/audio"
 # name: (duration, channels, peak ceiling, tempo)
 ASSETS = {
-    "bgm_menu.wav": (38.40, 2, 0.84, 100),
+    "bgm_menu.wav": (88 * 60 / 105, 2, 0.84, 105),
     "bgm_combat.wav": (153.60, 2, 0.90, 125),
     "sfx_laser_shoot.wav": (0.30, 1, 0.89, None),
     "sfx_heavy_cannon.wav": (0.82, 1, 0.93, None),
@@ -581,8 +583,8 @@ def main():
     if not args.verify_only:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         for name, (_, _, ceiling, bpm) in targets.items():
-            if name == "bgm_combat.wav":
-                print("Preserving studio combat suite; use tools/compose_combat_bgm.py to rebuild.", flush=True)
+            if name in ("bgm_combat.wav", "bgm_menu.wav"):
+                print(f"Preserving approved studio master: {name}", flush=True)
                 verify(args.output_dir / name, ASSETS[name])
                 continue
             print(f"Rendering {name} ...", flush=True)

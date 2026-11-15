@@ -8,7 +8,7 @@ Each source is matched to approximately −14 LUFS. At 0, 61.44 and 92.16 second
 
 ## Playback
 
-The first user gesture starts the existing WebAudio engine. While the studio file loads, the procedural score remains available; after decoding, one looping `AudioBufferSourceNode` fades in and the procedural buses fade out. There are no separate downloads or JS timers at transitions. Volume, mute, menu/intermission filtering, impact filter drops and time dilation share the same master bus. Repeated starts, pauses, restarts and intensity changes do not restart the suite. A network/decode failure retains procedural music. Disposal aborts loading and releases audio resources.
+The first user gesture starts the existing WebAudio engine. While the studio file loads, the procedural score remains available; after decoding, one looping `AudioBufferSourceNode` fades in and the procedural buses fade out. There are no separate downloads or JS timers at transitions. Volume and mute share the same master bus. Intermission filtering, impact filter drops and time dilation apply to combat. Repeated starts, pauses, restarts and intensity changes do not restart the suite. A network/decode failure retains procedural music. Disposal aborts loading and releases audio resources.
 
 Press **N** to cycle the suite and the three original procedural alternatives. Selection is persisted with the existing player profile; default index 0 now selects the studio suite. The original `SynthMusic` voices and sound effects remain intact.
 
@@ -25,3 +25,7 @@ python3 tools/generate_audio.py --verify-only
 ```
 
 The source `--original` must be the 30.72-second source master, not the replaced 153.60-second suite. The general procedural audio generator preserves and verifies the studio combat master instead of overwriting it. Other procedural assets retain their existing generator.
+
+## Esc standby music
+
+`bgm_menu.wav` is the supplied `01_menu_mist_105bpm.wav` (50.285714 s, 105 BPM), copied without audio processing; SHA256 `e950c754d0d0f43c066622fccd73b60da3c86d38ef5e3d58cdded0f3a049b5a5`. Intensity 0 (menu / Esc pause) enables this loop and fades combat out. Resuming play restores the selected combat music. Both decoded loops keep their clocks through switching; Mist uses the shared volume/mute bus without the combat low-pass filter. Failed loads retain procedural ambience. The three combat inputs above are already the supplied Downloads files and remain unchanged.

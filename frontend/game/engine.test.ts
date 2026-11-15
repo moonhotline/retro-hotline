@@ -328,6 +328,15 @@ describe('engine glory kill integration', () => {
 })
 
 describe('engine neon hack integration', () => {
+  it('consumes the opening Esc so native dialog cancel cannot immediately resume', () => {
+    engine['lockFailed'] = true
+    engine['status'] = 'playing'
+    const event = new KeyboardEvent('keydown', { code: 'Escape', cancelable: true })
+    window.dispatchEvent(event)
+    expect(engine.stats().status).toBe('paused')
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   function draft() {
     engine['director'].wave = 1
     const last = target(5, false)

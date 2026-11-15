@@ -104,6 +104,7 @@ type Mix = Record<Stem, number>
 export class SynthMusic {
   private readonly studioCombat: boolean
   private studio: StudioLoop | null = null
+  private menu: StudioLoop | null = null
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private lp: BiquadFilterNode | null = null
@@ -162,7 +163,7 @@ export class SynthMusic {
     const length = this.trackList().length
     this.currentTrackIndex = ((Math.trunc(index) % length) + length) % length
     this.step16 = 60 / this.getCurrentTrack().bpm / 4
-    this.studio?.setEnabled(this.currentTrackIndex === 0)
+    this.updateStudioSelection()
     this.applyMix()
     this.applyFilter()
     // Keep the next unscheduled beat and musical phase intact. Already queued
@@ -208,7 +209,11 @@ export class SynthMusic {
           this.applyFilter()
         })
         this.studio.setIntensity(this.intensity)
-        this.studio.setEnabled(this.currentTrackIndex === 0)
+        // Menu goes directly to the shared volume/mute bus, without combat muffling.
+        this.menu = new StudioLoop(this.ctx, this.master, () => { this.applyMix() },
+          '/audio/bgm_menu.wav?v=mist-105-1')
+        this.menu.setIntensity(1)
+        this.updateStudioSelection()
       }
 
       const len = Math.floor(this.ctx.sampleRate)
@@ -242,6 +247,7 @@ export class SynthMusic {
     if (i === this.intensity) return
     this.intensity = i
     this.studio?.setIntensity(i)
+    this.updateStudioSelection()
     this.applyMix()
     this.applyFilter()
   }
@@ -276,6 +282,8 @@ export class SynthMusic {
     this.disposed = true
     this.studio?.dispose()
     this.studio = null
+    this.menu?.dispose()
+    this.menu = null
     this.unlocked = false
     if (typeof window !== 'undefined') window.clearInterval(this.timer)
     this.timer = 0
@@ -305,7 +313,13 @@ export class SynthMusic {
       filterDropping: !!this.ctx && this.ctx.currentTime < this.filterDropUntil,
       activeSources: this.sources.size, disposed: this.disposed,
       studio: this.studio?.debugState() ?? null,
+      menu: this.menu?.debugState() ?? null,
     }
+  }
+
+  private updateStudioSelection() {
+    this.studio?.setEnabled(this.intensity > 0 && this.currentTrackIndex === 0)
+    this.menu?.setEnabled(this.intensity === 0)
   }
 
   private stems(): Record<Stem, GainNode | null> {
@@ -313,7 +327,7 @@ export class SynthMusic {
   }
 
   private mix(): Mix {
-    if (this.studio?.active) return { pad: 0, drum: 0, bass: 0, arp: 0, lead: 0 }
+    if (this.studio?.active || this.menu?.active) return { pad: 0, drum: 0, bass: 0, arp: 0, lead: 0 }
     const active = this.intensity > 0
     return {
       pad: active ? 0.7 : 1,
@@ -373,7 +387,7 @@ export class SynthMusic {
       this.nextT += missed * this.step16
     }
     while (this.nextT < this.ctx.currentTime + 0.16) {
-      if (!this.studio?.active) this.playStep(this.step, this.nextT)
+      if (!this.studio?.active && !this.menu?.active) this.playStep(this.step, this.nextT)
       this.step++
       this.nextT += this.step16
     }

@@ -11,6 +11,7 @@ export class StudioLoop {
     private readonly ctx: AudioContext,
     destination: AudioNode,
     private readonly onChange: () => void,
+    private readonly url = '/audio/bgm_combat.ogg?v=combat-suite-1',
   ) {
     this.gain = ctx.createGain()
     this.gain.gain.value = 0
@@ -50,7 +51,7 @@ export class StudioLoop {
   private async load() {
     this.state = 'loading'
     try {
-      const response = await fetch('/audio/bgm_combat.ogg?v=combat-suite-1', { signal: this.abort.signal })
+      const response = await fetch(this.url, { signal: this.abort.signal })
       if (this.abort.signal.aborted) return
       if (!response.ok) throw new Error(`Soundtrack HTTP ${response.status}`)
       const encoded = await response.arrayBuffer()
