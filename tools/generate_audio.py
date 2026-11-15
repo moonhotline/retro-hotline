@@ -4,7 +4,7 @@
     python3 tools/generate_audio.py
     python3 tools/generate_audio.py --verify-only
 
-Music uses six complete 4/4 bars: 14.40 s at 100 BPM and 11.52 s at 125 BPM.
+Music uses sixteen complete 4/4 bars: 38.40 s at 100 BPM and 30.72 s at 125 BPM.
 Note releases and effect returns wrap onto the beginning of each loop, including
 the mastering filter state. No fade-to-silence is applied to the music seam.
 SFX are mono for positional playback; music is true stereo with centered bass.
@@ -24,8 +24,8 @@ TAU = 2.0 * math.pi
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "frontend/public/audio"
 # name: (duration, channels, peak ceiling, tempo)
 ASSETS = {
-    "bgm_menu.wav": (14.40, 2, 0.84, 100),
-    "bgm_combat.wav": (11.52, 2, 0.90, 125),
+    "bgm_menu.wav": (38.40, 2, 0.84, 100),
+    "bgm_combat.wav": (30.72, 2, 0.90, 125),
     "sfx_laser_shoot.wav": (0.30, 1, 0.89, None),
     "sfx_heavy_cannon.wav": (0.82, 1, 0.93, None),
     "sfx_enemy_explosion.wav": (1.80, 1, 0.91, None),
@@ -100,14 +100,33 @@ def synth_note(midi, duration, voice):
             low += 0.26 * (raw - low)
             env = edge_envelope(t, duration, 0.0025, 0.035) * math.exp(-t / 0.10)
             result[i] = low * env
-        elif voice == "glass":
+        elif voice == "shimmer":
+            raw = 0.70 * math.sin(TAU * p) + 0.25 * math.sin(TAU * p * 2.0) + 0.20 * saw(p * 1.002, step * 1.002)
+            env = edge_envelope(t, duration, 0.002, 0.03) * math.exp(-t / 0.14)
+            result[i] = raw * env
+        elif voice == "lead":
+            vib_depth = 0.003 * min(1.0, max(0.0, (t - 0.16) / 0.3))
+            # Phase modulation keeps vibrato depth independent of note length.
+            vib = math.sin(TAU * 5.2 * t) * (f * vib_depth / 5.2)
+            p_mod = p + vib
+            raw = (
+                0.45 * saw(p_mod * 0.998, step * 0.998)
+                + 0.45 * saw(p_mod * 1.002 + 0.15, step * 1.002)
+                + 0.25 * math.sin(TAU * p_mod)
+            )
+            low += 0.22 * (raw - low)
+            env = edge_envelope(t, duration, 0.025, 0.08)
+            result[i] = low * env
+        elif voice in ("glass", "menu_glass"):
             raw = (
                 math.sin(TAU * p)
                 + 0.36 * math.sin(TAU * p * 2.0) * math.exp(-t / 0.24)
                 + 0.16 * math.sin(TAU * p * 3.0) * math.exp(-t / 0.13)
                 + 0.08 * math.sin(TAU * p * 6.0) * math.exp(-t / 0.08)
             )
-            result[i] = raw * math.exp(-t / 0.38) * edge_envelope(t, duration, 0.003, 0.1)
+            # Keep the approved pickup SFX glass voice byte-reproducible.
+            decay, release = (0.42, 0.12) if voice == "menu_glass" else (0.38, 0.1)
+            result[i] = raw * math.exp(-t / decay) * edge_envelope(t, duration, 0.003, release)
         else:
             raise ValueError(f"Unknown voice: {voice}")
     return result
@@ -183,53 +202,143 @@ class StereoLoop:
 def soundtrack(combat=False):
     bpm = 125 if combat else 100
     beat = 60.0 / bpm
-    loop = StereoLoop(24.0 * beat)
-    # Dm9 -> Bbmaj7 -> Fmaj7 -> Cadd9 -> Gm7 -> A7, resolving back to Dm.
-    chords = [(62, 65, 69, 76), (58, 62, 65, 69), (60, 64, 65, 69),
-              (60, 62, 67, 72), (58, 62, 65, 67), (57, 61, 64, 67)]
-    roots = [38, 34, 41, 36, 43, 33]
-    arp_order = [0, 2, 1, 3, 2, 1, 0, 2, 0, 1, 3, 2, 1, 2, 3, 1]
-    for bar, chord in enumerate(chords):
-        start = bar * 4.0 * beat
-        for voice, note in enumerate(chord):
-            loop.add(synth_note(note, 4.0 * beat + 0.68, "pad"), start,
-                     0.10 if combat else 0.20, [-0.75, 0.45, -0.35, 0.78][voice])
-        if combat:
-            for step, index in enumerate(arp_order):
-                loop.add(synth_note(chord[index] + 12, beat * 0.43, "arp"),
-                         start + step * beat / 4.0, 0.16 if step % 4 == 0 else 0.12,
-                         0.46 * math.sin(step * math.pi / 4.0))
-        else:
-            for position, index in [(0.5, 2), (1.75, 3), (3.0, 1)]:
-                loop.add(synth_note(chord[index] + 12, 1.15, "glass"),
-                         start + position * beat, 0.105, -0.36 if index % 2 else 0.36)
-    loop.ambience(beat)
+    loop = StereoLoop(64.0 * beat)
 
-    for bar, root in enumerate(roots):
-        for step in range(8):
-            accent = [1.0, 0.52, 0.80, 0.48, 1.0, 0.55, 0.80, 0.63][step]
-            pitch = root + ([0, 0, 12, 0, 0, 7, 12, 7][step] if combat else 0)
-            loop.add(synth_note(pitch, beat * 0.44, "bass" if combat else "soft_bass"),
-                     (bar * 4.0 + step / 2.0) * beat, (0.43 if combat else 0.29) * accent)
-    loop.duck(beat, 0.38 if combat else 0.14)
+    if combat:
+        # 16-bar cinematic synthwave progression in D minor:
+        # Section A (Bars 0-7): Driving retro synthwave groove with rich 9th/7th harmonies
+        # Dm9 -> Bbmaj7 -> Fmaj7 -> Cadd9 -> Gm7 -> Dm7/F -> Em7b5 -> A7(b13)
+        # Section B (Bars 8-15): Melodic elevation, triumphant yet dark emotional climax
+        # Bbmaj9 -> C9 -> Dm9 -> Am7 -> Gm9 -> Bbmaj7#11 -> F/A -> A7sus4/A7
+        chords = [
+            (62, 65, 69, 76), (58, 62, 65, 69), (60, 64, 65, 69), (60, 62, 67, 72),
+            (58, 62, 65, 67), (57, 62, 65, 69), (58, 62, 64, 67), (57, 61, 65, 67),
+            (58, 62, 65, 69), (60, 64, 67, 70), (62, 65, 69, 76), (60, 64, 67, 69),
+            (58, 62, 65, 69), (58, 64, 65, 69), (57, 60, 65, 69), (57, 62, 64, 67),
+        ]
+        roots = [38, 34, 41, 36, 43, 41, 40, 33, 34, 36, 38, 45, 43, 34, 45, 33]
 
-    for bar in range(6):
-        for step in range(4):
-            if combat or step in (0, 2):
-                loop.add(drum("kick", 1000 + bar * 4 + step), (bar * 4 + step) * beat,
-                         0.78 if combat else 0.28)
-            if step in (1, 3):
-                loop.add(drum("snare", 2000 + bar * 4 + step), (bar * 4 + step) * beat,
-                         0.47 if combat else 0.075, 0.05)
-        for step in range(8):
-            kind = "open_hat" if combat and step in (3, 7) else "hat"
-            gain = (0.11 if step % 2 else 0.075) if combat else 0.037
-            loop.add(drum(kind, 3000 + bar * 8 + step), (bar * 4 + step / 2.0) * beat,
-                     gain, 0.30 if step % 2 else -0.24)
-        if combat and bar in (1, 3, 5):
-            for step in (14, 15):
-                loop.add(drum("snare", 4000 + bar * 16 + step),
-                         (bar * 4 + step / 4.0) * beat, 0.13 + 0.035 * (step - 14), -0.12)
+        for bar, chord in enumerate(chords):
+            start = bar * 4.0 * beat
+            for voice, note in enumerate(chord):
+                loop.add(synth_note(note, 4.0 * beat + 0.68, "pad"), start,
+                         0.10, [-0.75, 0.45, -0.35, 0.78][voice])
+
+        arp_patterns = [
+            [0, 2, 1, 3, 2, 1, 0, 2, 0, 1, 3, 2, 1, 2, 3, 1],
+            [0, 1, 2, 3, 2, 3, 1, 2, 0, 2, 3, 2, 1, 0, 1, 2],
+            [1, 2, 3, 2, 3, 1, 2, 3, 2, 3, 1, 2, 0, 1, 2, 3],
+            [3, 2, 1, 2, 3, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1],
+        ]
+        for bar, chord in enumerate(chords):
+            start = bar * 4.0 * beat
+            pattern = arp_patterns[bar // 4]
+            for step, index in enumerate(pattern):
+                pan1 = -0.42 + 0.18 * math.sin(step * math.pi / 4.0)
+                gain1 = 0.15 if step % 4 == 0 else 0.11
+                loop.add(synth_note(chord[index] + 12, beat * 0.42, "arp"),
+                         start + step * beat / 4.0, gain1, pan1)
+                if step % 2 == 1 or (bar >= 8 and step % 4 == 2):
+                    pan2 = 0.48 + 0.16 * math.cos(step * math.pi / 4.0)
+                    shimmer_note = chord[(index + 1) % 4] + 24
+                    loop.add(synth_note(shimmer_note, beat * 0.35, "shimmer"),
+                             start + step * beat / 4.0, 0.08 if bar < 8 else 0.11, pan2)
+
+        combat_melody = [
+            (6.0, 76, 1.8, 0.16), (8.0, 77, 1.5, 0.18), (10.0, 76, 1.0, 0.15),
+            (11.0, 74, 1.2, 0.17), (13.0, 72, 1.5, 0.16), (15.0, 74, 1.8, 0.18),
+            (18.0, 74, 1.0, 0.16), (19.0, 76, 1.0, 0.17), (20.0, 77, 1.5, 0.19),
+            (22.0, 76, 1.0, 0.16), (23.0, 74, 1.0, 0.16), (25.0, 73, 1.5, 0.18),
+            (27.0, 74, 1.5, 0.18), (29.0, 76, 2.5, 0.20),
+            (32.0, 77, 2.0, 0.24), (34.5, 76, 1.2, 0.22), (36.0, 74, 1.8, 0.23),
+            (38.0, 76, 1.0, 0.21), (39.0, 77, 1.0, 0.23), (40.0, 81, 2.8, 0.26),
+            (43.0, 79, 1.2, 0.22), (44.5, 77, 1.2, 0.21), (46.0, 76, 1.8, 0.20),
+            (48.5, 74, 1.2, 0.22), (50.0, 77, 1.5, 0.24), (52.0, 81, 2.0, 0.25),
+            (54.5, 80, 1.2, 0.22), (56.0, 77, 1.5, 0.22), (58.0, 76, 1.2, 0.21),
+            (59.5, 74, 1.2, 0.21), (61.0, 73, 1.8, 0.23), (63.0, 74, 1.5, 0.22),
+        ]
+        for pos_beat, note, dur_beats, gain in combat_melody:
+            loop.add(synth_note(note, dur_beats * beat, "lead"),
+                     pos_beat * beat, gain, 0.10 * math.sin(pos_beat))
+
+        loop.ambience(beat)
+
+        for bar, root in enumerate(roots):
+            for step in range(8):
+                accent = [1.0, 0.52, 0.80, 0.48, 1.0, 0.55, 0.80, 0.63][step]
+                pitch = root + ([0, 0, 12, 0, 0, 7, 12, 7][step] if bar >= 4 else 0)
+                loop.add(synth_note(pitch, beat * 0.44, "bass"),
+                         (bar * 4.0 + step / 2.0) * beat, 0.42 * accent)
+        loop.duck(beat, 0.38)
+
+        for bar in range(16):
+            for step in range(4):
+                loop.add(drum("kick", 1000 + bar * 4 + step), (bar * 4 + step) * beat, 0.78)
+                if step in (1, 3):
+                    loop.add(drum("snare", 2000 + bar * 4 + step), (bar * 4 + step) * beat, 0.48, 0.05)
+            for step in range(8):
+                kind = "open_hat" if step in (3, 7) and bar >= 4 else "hat"
+                gain = 0.11 if step % 2 else 0.075
+                loop.add(drum(kind, 3000 + bar * 8 + step), (bar * 4 + step / 2.0) * beat,
+                         gain, 0.30 if step % 2 else -0.24)
+            if bar in (3, 7, 11, 15):
+                for step in (14, 15):
+                    loop.add(drum("snare", 4000 + bar * 16 + step),
+                             (bar * 4 + step / 4.0) * beat, 0.14 + 0.04 * (step - 14), -0.12)
+            if bar == 15:
+                for step in (12, 13):
+                    loop.add(drum("snare", 4500 + step),
+                             (bar * 4 + step / 4.0) * beat, 0.12, 0.10)
+    else:
+        menu_chords = [
+            (62, 65, 69, 76), (58, 62, 65, 69), (58, 62, 65, 67), (57, 62, 64, 67),
+            (62, 65, 69, 72), (60, 64, 65, 69), (58, 64, 65, 69), (57, 61, 64, 70),
+            (58, 62, 65, 69), (60, 62, 67, 72), (60, 64, 67, 69), (62, 65, 69, 76),
+            (58, 62, 65, 67), (58, 61, 65, 68), (57, 60, 65, 69), (57, 61, 64, 67),
+        ]
+        menu_roots = [38, 34, 43, 33, 38, 41, 34, 33, 34, 36, 45, 38, 43, 34, 45, 33]
+
+        for bar, chord in enumerate(menu_chords):
+            start = bar * 4.0 * beat
+            for voice, note in enumerate(chord):
+                loop.add(synth_note(note, 4.0 * beat + 0.85, "pad"), start,
+                         0.20, [-0.75, 0.45, -0.35, 0.78][voice])
+
+        menu_melody = [
+            (1.0, 76, 2.2, 0.14, -0.35), (2.75, 74, 1.4, 0.12, 0.35), (4.5, 69, 1.8, 0.13, -0.25),
+            (6.0, 72, 1.4, 0.14, 0.30), (7.25, 74, 1.6, 0.15, -0.30), (9.0, 77, 2.0, 0.16, 0.40),
+            (11.0, 76, 1.2, 0.13, -0.20), (12.5, 74, 1.5, 0.13, 0.25), (14.5, 73, 2.2, 0.15, -0.35),
+            (17.0, 76, 1.8, 0.15, 0.35), (19.0, 77, 1.6, 0.16, -0.35), (20.5, 81, 2.4, 0.18, 0.45),
+            (23.0, 79, 1.5, 0.15, -0.25), (25.0, 76, 1.8, 0.15, 0.30), (26.5, 77, 1.4, 0.16, -0.35),
+            (28.0, 81, 2.2, 0.17, 0.40), (30.0, 74, 1.5, 0.14, -0.30), (31.25, 73, 2.0, 0.15, 0.25),
+            (33.0, 81, 2.4, 0.18, -0.40), (35.25, 77, 1.5, 0.15, 0.35), (36.5, 76, 1.5, 0.14, -0.25),
+            (38.0, 79, 2.0, 0.16, 0.35), (40.25, 74, 1.4, 0.14, -0.30), (41.5, 76, 1.8, 0.15, 0.25),
+            (43.0, 76, 1.5, 0.14, -0.35), (44.5, 72, 1.5, 0.13, 0.30), (46.0, 74, 2.2, 0.16, -0.25),
+            (49.0, 81, 2.2, 0.18, 0.40), (51.25, 77, 1.5, 0.15, -0.35), (52.5, 74, 1.5, 0.14, 0.25),
+            (54.0, 80, 2.4, 0.17, -0.40), (56.5, 77, 1.5, 0.15, 0.30), (58.0, 76, 1.8, 0.15, -0.30),
+            (60.0, 69, 1.5, 0.13, 0.25), (61.5, 73, 2.0, 0.16, -0.35), (63.25, 74, 1.8, 0.15, 0.30),
+        ]
+        for pos_beat, note, dur_beats, gain, pan in menu_melody:
+            loop.add(synth_note(note, dur_beats * beat, "menu_glass"), pos_beat * beat, gain, pan)
+
+        loop.ambience(beat)
+
+        for bar, root in enumerate(menu_roots):
+            for step in range(8):
+                accent = [1.0, 0.48, 0.75, 0.45, 0.95, 0.50, 0.75, 0.55][step]
+                loop.add(synth_note(root, beat * 0.44, "soft_bass"),
+                         (bar * 4.0 + step / 2.0) * beat, 0.29 * accent)
+        loop.duck(beat, 0.14)
+
+        for bar in range(16):
+            for step in (0, 2):
+                loop.add(drum("kick", 1000 + bar * 4 + step), (bar * 4 + step) * beat, 0.26)
+            for step in (1, 3):
+                loop.add(drum("snare", 2000 + bar * 4 + step), (bar * 4 + step) * beat, 0.07, 0.05)
+            for step in range(8):
+                loop.add(drum("hat", 3000 + bar * 8 + step), (bar * 4 + step / 2.0) * beat,
+                         0.035, 0.30 if step % 2 else -0.24)
+
     return loop.channels
 
 
@@ -434,8 +543,9 @@ def verify(path, spec):
     detail = ""
     if bpm:
         # Duration must preserve the musical grid, not trim a partial measure.
-        if frames(duration) != frames(24.0 * 60.0 / bpm):
-            raise ValueError(f"{path.name}: loop does not contain six complete bars")
+        bars = round(duration * bpm / 240.0)
+        if frames(duration) != frames(bars * 4.0 * 60.0 / bpm):
+            raise ValueError(f"{path.name}: loop does not contain {bars} complete bars")
         seam = max(abs(ch[0] - ch[-1]) for ch in channels)
         derivative_rms = max(math.sqrt(sum((b - a) ** 2 for a, b in zip(ch, ch[1:]))
                                        / (len(ch) - 1)) for ch in channels)
@@ -449,7 +559,7 @@ def verify(path, spec):
         mono = math.sqrt(sum(((a + b) / 2.0) ** 2 for a, b in zip(*channels)) / len(channels[0]))
         if side < 0.003 or mono < rms * 0.7:
             raise ValueError(f"{path.name}: missing stereo width or poor mono compatibility")
-        detail = f", {bpm} BPM / 6 bars, seam {seam:.6f}"
+        detail = f", {bpm} BPM / {bars} bars, seam {seam:.6f}"
     else:
         if max(abs(ch[0]) for ch in channels) > 0.001 or max(abs(ch[-1]) for ch in channels) > 0.001:
             raise ValueError(f"{path.name}: abrupt one-shot endpoint")
