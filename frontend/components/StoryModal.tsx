@@ -26,6 +26,7 @@ export interface StoryModalProps {
 
 export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: StoryModalProps) {
   const [lineIndex, setLineIndex] = useState(0)
+  const isMerchant = Boolean(story.isShopOpen && story.shopItems?.length)
 
   useEffect(() => {
     if (story.open) {
@@ -39,10 +40,14 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return
+      if (isMerchant && (e.key === ' ' || e.key === 'Enter') &&
+        e.target instanceof Element && e.target.closest('button')) return
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E' || e.code === 'KeyE') {
         e.preventDefault()
         e.stopPropagation()
-        if (lineIndex < story.lines.length - 1) {
+        if (isMerchant) {
+          onClose()
+        } else if (lineIndex < story.lines.length - 1) {
           setLineIndex((prev) => prev + 1)
           audioPing?.()
         } else {
@@ -57,19 +62,18 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
 
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [story.open, lineIndex, story.lines.length, onClose, audioPing])
+  }, [story.open, lineIndex, story.lines.length, isMerchant, onClose, audioPing])
 
-  if (!story.open || story.lines.length === 0) return null
+  if (!story.open || (!isMerchant && story.lines.length === 0)) return null
 
   const currentLine = story.lines[lineIndex] ?? story.lines[0]!
   const isLast = lineIndex >= story.lines.length - 1
-  const isMerchant = story.isShopOpen && Boolean(story.shopItems && story.shopItems.length > 0)
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={story.title}
+      aria-label={isMerchant ? 'BLACK MARKET / 黑市' : story.title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md select-none"
       onClick={(e) => {
         e.stopPropagation()
@@ -91,14 +95,15 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
           <div className="flex items-center gap-2.5">
             <span className="h-2.5 w-2.5 rounded-full bg-[#00f0ff] shadow-[0_0_10px_#00f0ff]" />
             <span className="font-orbitron text-xs sm:text-sm font-bold tracking-widest text-[#9ffcff]">
-              {story.title}
+              {isMerchant ? 'BLACK MARKET / 黑市' : story.title}
             </span>
           </div>
           <span className="rounded bg-white/10 px-2.5 py-1 font-tech text-[10px] uppercase tracking-wider text-white/80 border border-white/10">
-            {story.badge}
+            {isMerchant ? `${score} PTS` : story.badge}
           </span>
         </div>
 
+        {!isMerchant && currentLine && <>
         {/* Speaker Info */}
         <div className="mt-4 flex items-baseline gap-2">
           <span className="font-orbitron text-sm font-black text-[#ff2975]">
@@ -123,18 +128,11 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
           )}
         </div>
 
+        </>}
+
         {/* Black Market Storefront Section */}
         {isMerchant && story.shopItems && (
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-orbitron text-xs font-bold tracking-widest text-[#ffd319]">
-                CONTRABAND SUPPLIES // 黑市补给
-              </span>
-              <span className="font-orbitron text-xs font-black tracking-wider text-white">
-                SCORE: <span className="text-[#00f0ff]">{score}</span> PTS
-              </span>
-            </div>
-
+          <div className="mt-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {story.shopItems.map((item) => {
                 const canAfford = score >= item.cost
@@ -149,9 +147,6 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
                       </div>
                       <div className="mt-1 font-tech text-[10px] text-[#39ff88] font-bold tracking-wider">
                         {item.effect}
-                      </div>
-                      <div className="mt-1 font-sans text-[10px] text-white/50 leading-tight">
-                        {item.description}
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between pt-2 border-t border-white/10">
@@ -168,7 +163,7 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
                             : 'border border-white/10 text-white/30 cursor-not-allowed'
                         }`}
                       >
-                        [ ◻︎ BUY ]
+                        购买
                       </button>
                     </div>
                   </div>
@@ -178,6 +173,13 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
           </div>
         )}
 
+        {isMerchant ? (
+          <div className="mt-4 flex justify-end border-t border-white/10 pt-3">
+            <button type="button" onClick={onClose} className="font-tech text-xs text-[#00f0ff] hover:text-white">
+              [E / ESC] 返回
+            </button>
+          </div>
+        ) : <>
         {/* Footer controls with PS5 Button Glyphs */}
         <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-3 font-tech text-xs text-white/50">
           <span>
@@ -210,6 +212,7 @@ export function StoryModal({ story, score = 0, onClose, onBuyItem, audioPing }: 
             </button>
           </div>
         </div>
+        </>}
       </div>
     </div>
   )

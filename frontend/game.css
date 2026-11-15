@@ -8,6 +8,26 @@
   font-family: 'Share Tech Mono', monospace;
 }
 
+.sniper-hud { position: absolute; inset: 0; z-index: 32; pointer-events: none; }
+.sniper-warning {
+  position: absolute; width: 52px; transform: translate(-50%, -50%);
+  color: #ff9f1c; text-align: center; font: 10px 'Share Tech Mono', monospace;
+  letter-spacing: 0.12em; filter: drop-shadow(0 1px 4px #060810);
+}
+.sniper-warning svg { width: 48px; height: 48px; display: block; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; }
+.sniper-charge-track { stroke: #060810; stroke-width: 5; }
+.sniper-charge-fill { stroke-width: 3; }
+.sniper-warning span { display: block; margin-top: -3px; background: #060810e6; border-radius: 3px; }
+.sniper-urgent { color: #ff557b; }
+.sniper-redirected { color: #00f0ff; }
+.sniper-hack-prompt {
+  position: absolute; left: 50%; top: 56%; transform: translateX(-50%);
+  max-width: calc(100% - 2rem); padding: 6px 10px; border: 1px solid currentColor;
+  border-radius: 4px; background: #060810ed; color: #ffe1ac;
+  font: 11px 'Share Tech Mono', monospace; text-align: center;
+}
+.sniper-hack-prompt.sniper-redirected { color: #00f0ff; }
+
 .ability-hud {
   position: absolute;
   bottom: 1rem;

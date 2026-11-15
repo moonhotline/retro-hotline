@@ -334,7 +334,7 @@ export function makeProjectile(color: number): THREE.Sprite {
 }
 
 /** Marksman laser sight line (two endpoints updated per frame). */
-export function makeLaserLine(color: number): THREE.Line {
+export function makeLaserLine(color: number): THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3))
   const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0 })

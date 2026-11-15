@@ -40,6 +40,7 @@ Whenever you complete a feature, bug fix, redesign, or refactor:
   - Do not place long narrative paragraphs, backstory essays, or walls of marketing copy on the console standby or dashboard UI.
   - Keep badges punchy and concise (e.g. `PS5™ PRO ENHANCED`, `120 FPS`, `TEMPEST 3D AUDIO`).
   - Activity tiles must remain crisp, structured, and minimal.
+  - 商店文案只保留短商品名、直接效果、价格与购买/离开操作；禁止重复描述、营销段落、角色头衔和多层双语标签堆叠。商店打开后直接展示商品，不用对白阻挡购买。
 
 ---
 

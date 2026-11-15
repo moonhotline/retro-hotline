@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HackTerminal } from '../components/HackTerminal'
 import { StoryModal } from '../components/StoryModal'
+import { SniperWarningHud } from '../components/SniperWarningHud'
 import { ConsoleMenu, TrackBadge } from '../components/ConsoleMenu'
 import type { HackId } from '../game/combat/modifiers'
 import { loadProfile } from '../game/combat/storage'
@@ -130,7 +131,7 @@ function HitMarker({ id, crit }: { id: number; crit: boolean }) {
   )
 }
 
-function Hud({ hud }: { hud: HudState }) {
+export function Hud({ hud }: { hud: HudState }) {
   const wave = Math.max(hud.wave, 1)
   const trackBanner = hud.banner.startsWith('TRACK // ')
   return (
@@ -146,6 +147,7 @@ function Hud({ hud }: { hud: HudState }) {
 
       {hud.isAiming && hud.weapon === 'sniper' ? <SniperScopeOverlay /> : <Crosshair />}
       <HitMarker id={hud.hitMarkerId} crit={hud.hitMarkerCrit} />
+      <SniperWarningHud state={hud.sniperHack} />
 
       {hud.chronoTimeScale !== undefined && hud.chronoTimeScale < 0.25 && (
         <div className="absolute left-1/2 top-[44%] -translate-x-1/2 rounded-full border border-[#00f0ff]/40 bg-[#060810]/80 px-3 py-0.5 font-orbitron text-[10px] font-bold tracking-widest text-[#00f0ff] backdrop-blur-sm animate-pulse">
@@ -363,7 +365,7 @@ function Hud({ hud }: { hud: HudState }) {
           </div>
         )}
         <div className="font-tech text-[10px] uppercase tracking-widest text-white/35">
-          Q SWAP · F PUNCH · E GLORY KILL
+          Q SWAP · F HACK / PUNCH · E GLORY KILL
         </div>
       </div>
     </div>

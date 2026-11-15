@@ -75,7 +75,7 @@ export function TrackBadge({ name = 'NEON COMBAT SUITE', bpm = 125 }: { name?: s
 
 const CONTROL_GROUPS = [
   { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide · ground only', 'C / CTRL']] },
-  { title: 'COMBAT', rows: [['Full-auto rifle · hold', 'LMB'], ['Punch / close execution', 'RMB / F'], ['Glory shatter · staggered target', 'E'], ['Reload / swap weapon', 'R / Q']] },
+  { title: 'COMBAT', rows: [['Full-auto rifle · hold', 'LMB'], ['Hack shot / punch', 'F'], ['Punch / close execution', 'RMB'], ['Glory shatter · staggered target', 'E'], ['Reload / swap weapon', 'R / Q']] },
   { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Wall run / climb · air near wall', 'SPACE'], ['Tactical slide', 'C / CTRL']] },
   { title: 'AUDIO & SYSTEM', rows: [['Cycle music track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
 ]

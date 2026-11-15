@@ -296,6 +296,12 @@ export class Sfx {
   }
 
   /** Marksman charge beep + fire crack. */
+  sniperAlert(pan = 0, urgent = false) {
+    // Called at simulation-time thresholds; no wall-clock timer can outlive a lock.
+    this.tone(urgent ? 1560 : 880, urgent ? 0.045 : 0.09, 0.18, 'triangle', undefined, 0.002, pan)
+    if (urgent) this.tone(2080, 0.065, 0.10, 'square', undefined, 0.002, pan)
+  }
+
   charge(pan = 0) {
     this.tone(880, 0.07, 0.14, 'square', undefined, 0.002, pan)
     window.setTimeout(() => this.tone(1180, 0.07, 0.14, 'square', undefined, 0.002, pan), 260)

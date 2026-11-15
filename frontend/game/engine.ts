@@ -297,6 +297,7 @@ export class GameEngine implements CombatHost {
       ammoEfficiency: this.hackManager.ammoEfficiency,
       invulnerable: this.invulnerable,
       hitstopT: this.hitstopT,
+      sniperHack: this.director.sniperHackState(),
       fov: this.camera.fov,
       overchargeT: this.overchargeT,
       pos: { x: this.pos.x, y: this.pos.y, z: this.pos.z },
@@ -825,7 +826,10 @@ export class GameEngine implements CombatHost {
       }
       this.tryGloryKill()
     }
-    if (e.code === 'KeyF') this.tryPunch()
+    if (e.code === 'KeyF' && !e.repeat) {
+      if (this.director.hackSniperShot()) this.emit(true)
+      else this.tryPunch()
+    }
     if (e.code === 'KeyC' || e.code === 'ControlLeft') this.trySlide()
     if (e.code === 'KeyR') this.tryReload()
   }
@@ -1135,6 +1139,7 @@ export class GameEngine implements CombatHost {
     const alivePopups = this.popups.filter((p) => t - p.born < 1.4)
     this.popups = alivePopups
     const snap: HudState = {
+      sniperHack: this.director.sniperHackState(),
       status: this.status,
       health: Math.max(0, Math.round(this.health)),
       maxHealth: this.maxHealth,
