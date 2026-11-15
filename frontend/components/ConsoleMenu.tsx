@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PlayerProfile } from '../game/combat/storage'
 import { MUSIC_TRACKS } from '../game/music'
 import type { HudState } from '../game/types'
+import { MistAtmosphere } from './MistAtmosphere'
 import './ConsoleMenu.css'
 
 type ConsoleAction = 'confirm' | 'back' | 'controls' | 'audio' | 'track'
@@ -205,12 +206,14 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
   return (
     <div className="ps5-standby-screen console-shell" data-ps5-phase={standby ? 'standby' : 'dashboard'}>
       <div className="console-atmosphere" aria-hidden="true">
+      {standby ? <MistAtmosphere /> : <>
       <div className="ps5-ambient-ribbon" aria-hidden="true" />
       <svg className="console-ribbons" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none" aria-hidden="true">
         <path d="M-200 740C300 100 650 1230 1650 170" stroke="#3db4d9" strokeWidth="38" opacity=".06" />
         <path d="M-200 740C300 100 650 1230 1650 170" stroke="#9ae8f4" strokeWidth="1" opacity=".35" />
         <path d="M-200 752C310 130 670 1230 1650 200" stroke="#9ae8f4" strokeWidth=".6" opacity=".15" />
       </svg>
+      </>}
       </div>
       {standby ? (
         <main className="console-standby" aria-label="Console standby">

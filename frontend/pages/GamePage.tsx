@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HackTerminal } from '../components/HackTerminal'
 import { StoryModal } from '../components/StoryModal'
+import { PauseScene } from '../components/PauseScene'
 import { SniperWarningHud } from '../components/SniperWarningHud'
 import { ConsoleMenu, TrackBadge } from '../components/ConsoleMenu'
 import type { HackId } from '../game/combat/modifiers'
@@ -453,36 +454,13 @@ export default function GamePage() {
         />
       )}
 
-      {status === 'paused' && !hud.draftOpen && (
-        <div
-          className="absolute inset-0 z-10 flex items-center justify-center bg-[#0d0221]/60 backdrop-blur-[2px]"
-          onClick={() => engineRef.current?.resume()}
-        >
-          <div className="neon-panel mx-4 max-w-md rounded-2xl p-8 text-center text-white">
-            <h2 className="font-orbitron text-3xl font-black italic text-[#ff9fc4]">PAUSED</h2>
-            <p className="mt-2 font-tech text-sm text-white/60">CLICK ANYWHERE TO RESUME</p>
-            <div className="mt-6 flex justify-center gap-3">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  engineRef.current?.resume()
-                }}
-                className="neon-btn-cyan neon-btn rounded-lg px-8 py-3 font-orbitron font-bold italic"
-              >
-                RESUME
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  engineRef.current?.restart()
-                }}
-                className="neon-btn rounded-lg px-8 py-3 font-orbitron font-bold italic"
-              >
-                RESTART
-              </button>
-            </div>
-          </div>
-        </div>
+      {status === 'paused' && !hud.draftOpen && !hud.storyModal?.open && (
+        <PauseScene
+          hud={hud}
+          onResume={() => engineRef.current?.resume()}
+          onRestart={() => engineRef.current?.restart()}
+          onAudio={toggleAudio}
+        />
       )}
 
       {status === 'over' && (
