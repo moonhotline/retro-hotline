@@ -87,6 +87,45 @@ function key(code: string) {
   window.dispatchEvent(new KeyboardEvent('keyup', { code }))
 }
 
+describe('F-key sniper Hack integration', () => {
+  it('prioritizes a valid Hack over punch and resumes after its 120ms shot freeze', () => {
+    const victim = target(12, false)
+    const source = engine['director'].spawnEnemy('marksman')
+    source.parts.group.position.copy(engine.playerPos()).add(new THREE.Vector3(-12, 0, -32))
+    source.speed = victim.speed = 0
+    source.fireT = victim.fireT = 99
+    tick(0.4)
+    expect(engine.stats().sniperHack.status).toBe('ready')
+    key('KeyF')
+    expect(engine.stats().sniperHack.status).toBe('redirected')
+    expect(engine.stats().punchCd).toBe(0)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyF', repeat: true }))
+    expect(engine.stats().punchCd).toBe(0)
+    tick(0.76)
+    expect(engine.stats().hitstopT).toBe(0.12)
+    const before = engine.playerPos().clone()
+    const cooldown = engine.stats().sniperHack.cooldown
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
+    tick(0.06)
+    expect(engine.playerPos().distanceTo(before)).toBeCloseTo(0)
+    expect(engine.stats().sniperHack.cooldown).toBe(cooldown)
+    tick(0.06)
+    tick(0.1)
+    expect(engine.stats().status).toBe('playing')
+    expect(engine.stats().hitstopT).toBe(0)
+    expect(engine.playerPos().distanceTo(before)).toBeGreaterThan(0.5)
+  })
+
+  it('preserves punch without a Hack opportunity and ignores F while paused', () => {
+    key('KeyF')
+    expect(engine.stats().punchCd).toBeGreaterThan(0)
+    engine['punchCd'] = 0
+    engine['setStatus']('paused')
+    key('KeyF')
+    expect(engine.stats().punchCd).toBe(0)
+  })
+})
+
 describe('full-auto rifle and dedicated controls', () => {
   it('clears held and queued inputs on blur and ignores HUD button clicks', () => {
     document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))

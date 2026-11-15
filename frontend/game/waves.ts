@@ -7,7 +7,7 @@ import {
   type DroneParts,
 } from './effects'
 import { resolveWalls, type Wall } from './map'
-import type { DroneType } from './types'
+import type { DroneType, SniperHackState } from './types'
 import type { Sfx } from './audio'
 import type { Particles } from './effects'
 import type { HackManager, NeonHack } from './combat/modifiers'
@@ -26,7 +26,10 @@ export interface Enemy {
   burst: number
   burstT: number
   aimT: number
-  laser: THREE.Line | null
+  hackTarget?: Enemy
+  shotEnd?: THREE.Vector3
+  shotFlash?: number
+  laser: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> | null
   frozenTimer?: number
   burnTimer?: number
   burnTick?: number
@@ -74,6 +77,8 @@ const tmpB = new THREE.Vector3()
 const tmpC = new THREE.Vector3()
 
 const AIM_TIME = 1.15
+const URGENT_TIME = AIM_TIME - 0.35
+const HACK_COOLDOWN = 6
 
 /** Owns enemies, ranged projectiles, spawn pacing and wave composition. */
 export class WaveDirector {
@@ -85,6 +90,7 @@ export class WaveDirector {
   private queue: DroneType[] = []
   private spawnTimer = 0
   private raycaster = new THREE.Raycaster()
+  private hackCooldown = 0
 
   constructor(private host: CombatHost) {}
 
@@ -99,6 +105,7 @@ export class WaveDirector {
   }
 
   reset() {
+    this.hackCooldown = 0
     this.draftPending = false
     for (const e of this.enemies) {
       this.host.scene.remove(e.parts.group)
@@ -152,6 +159,8 @@ export class WaveDirector {
     // Interrupt queued bursts and laser charges; recovery starts a fresh attack.
     enemy.burst = 0
     enemy.aimT = 0
+    delete enemy.hackTarget
+    enemy.shotFlash = 0
     enemy.fireT = Math.max(enemy.fireT, 0.6)
     if (enemy.laser) (enemy.laser.material as THREE.LineBasicMaterial).opacity = 0
   }
@@ -165,6 +174,7 @@ export class WaveDirector {
 
   update(dt: number, t: number) {
     if (this.draftPending) return
+    this.hackCooldown = Math.max(0, this.hackCooldown - dt)
     // Wave pacing
     if (this.intermission > 0) {
       this.intermission -= dt
@@ -181,8 +191,9 @@ export class WaveDirector {
     const pp = this.host.playerPos()
     const collidables = this.host.collidables()
 
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i]!
+    // A redirected shot can remove another enemy during this traversal.
+    for (const e of [...this.enemies].reverse()) {
+      if (!this.enemies.includes(e)) continue
       this.updateEnemy(e, dt, t, pp, collidables)
       if (this.draftPending) return
     }
@@ -275,6 +286,8 @@ export class WaveDirector {
       }
     }
 
+    if (!this.enemies.includes(e)) return
+
     if (e.staggerTimer > 0) {
       const color = Math.sin(t * 18) >= 0 ? 0xffd319 : 0x00f0ff
       outerMat.color.setHex(color)
@@ -366,51 +379,7 @@ export class WaveDirector {
         break
       }
       case 'sniper': {
-        // Marksman: keep distance, laser telegraph, hitscan shot
-        e.fireT -= dt
-        const laser = e.laser
-        if (dist < 24) {
-          move(dir, -e.speed) // retreat
-          e.aimT = 0
-          if (laser) (laser.material as THREE.LineBasicMaterial).opacity = 0
-        } else if (this.losBlocked(g.position, pp, collidables)) {
-          e.aimT = 0
-          if (laser) (laser.material as THREE.LineBasicMaterial).opacity = 0
-          // reposition along the perpendicular
-          const orbit = tmpC.set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(e.phase) > 0 ? 1 : -1)
-          g.position.addScaledVector(orbit, e.speed * dt)
-        } else {
-          if (e.aimT >= 0 && e.aimT < 0.01) {
-            // start of a new aim: charge beep
-            if (e.fireT <= 0) this.host.sfx.charge(pan)
-          }
-          e.aimT += dt
-          if (laser) {
-            const mat = laser.material as THREE.LineBasicMaterial
-            const attr = laser.geometry.getAttribute('position') as THREE.BufferAttribute
-            attr.setXYZ(0, g.position.x, g.position.y, g.position.z)
-            attr.setXYZ(1, pp.x, pp.y, pp.z)
-            attr.needsUpdate = true
-            if (e.aimT >= AIM_TIME) {
-              // Fire
-              this.host.damagePlayer(e.damage)
-              this.host.sfx.sniper(pan)
-              e.aimT = -2.6 // cooldown as negative time
-              mat.color.set(0xffffff)
-              mat.opacity = 1
-            } else {
-              const hot = e.aimT > AIM_TIME - 0.35
-              mat.color.set(hot ? 0xffffff : 0xff2975)
-              mat.opacity = e.aimT < 0 ? 0 : hot ? 1 : 0.35 + 0.3 * Math.sin(t * 18)
-            }
-          }
-          if (e.aimT < AIM_TIME) {
-            // slow strafe while aiming
-            const orbit = tmpC.set(-dir.z, 0, dir.x)
-            g.position.addScaledVector(orbit, Math.sin(t * 0.9 + e.phase) * dt * 2)
-          }
-        }
-        if (e.aimT < 0) e.aimT += dt
+        this.updateSniper(e, dt * speedScale, pp, collidables)
         break
       }
     }
@@ -426,6 +395,137 @@ export class WaveDirector {
     resolveWalls(this.host.walls(), g.position, e.radius + 0.4, g.position.y - e.radius)
 
     g.lookAt(pp)
+  }
+
+  private chargingSnipers() {
+    return this.enemies.filter((e) => e.type === 'marksman' && e.hp > 0 &&
+      e.staggerTimer <= 0 && e.aimT > 0 && e.aimT < AIM_TIME)
+      .sort((a, b) => b.aimT - a.aimT)
+  }
+
+  private hackOpportunity() {
+    const sources = this.chargingSnipers().filter((e) => !e.hackTarget)
+    if (sources.length === 0) return { status: 'none' as const }
+    this.host.scene.updateMatrixWorld(true)
+    this.host.camera.updateMatrixWorld(true)
+    this.raycaster.setFromCamera(new THREE.Vector2(), this.host.camera)
+    this.raycaster.far = Infinity
+    const hit = this.raycaster.intersectObjects(this.raycastTargets(), false)[0]
+    const target = hit?.object.userData['enemy'] as Enemy | undefined
+    if (!target || !sources.some((source) => source !== target)) return { status: 'aim' as const }
+    if (this.losBlocked(this.host.camera.position, hit!.point, this.host.collidables())) {
+      return { status: 'blocked' as const }
+    }
+    const source = sources.find((candidate) => candidate !== target &&
+      !this.losBlocked(candidate.parts.group.position, target.parts.group.position, this.host.collidables()))
+    return source ? { status: 'ready' as const, source, target } : { status: 'blocked' as const }
+  }
+
+  /** F redirects one committed shot; it never changes allegiance or refills its charge. */
+  hackSniperShot(): boolean {
+    if (this.draftPending || this.hackCooldown > 0) return false
+    const opportunity = this.hackOpportunity()
+    if (opportunity.status !== 'ready') return false
+    opportunity.source.hackTarget = opportunity.target
+    this.hackCooldown = HACK_COOLDOWN
+    this.host.sfx.gloryPing()
+    this.drawSniperBeam(opportunity.source, opportunity.target.parts.group.position, 0x00f0ff)
+    return true
+  }
+
+  sniperHackState(): SniperHackState {
+    const snipers = this.chargingSnipers()
+    const forward = this.host.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize()
+    const right = new THREE.Vector3(-forward.z, 0, forward.x)
+    const warnings = snipers.map((enemy) => {
+      const direction = enemy.parts.group.position.clone().sub(this.host.playerPos()).setY(0)
+      return {
+        id: enemy.parts.group.uuid,
+        bearing: Math.atan2(direction.dot(right), direction.dot(forward)),
+        progress: enemy.aimT / AIM_TIME,
+        urgent: enemy.aimT >= URGENT_TIME,
+        redirected: Boolean(enemy.hackTarget),
+      }
+    })
+    const redirected = snipers.some((e) => e.hackTarget)
+    const hasThreat = snipers.some((e) => !e.hackTarget)
+    const status = !hasThreat && redirected ? 'redirected' : this.hackCooldown > 0 ? 'cooldown' : this.hackOpportunity().status
+    return { warnings, status, cooldown: this.hackCooldown }
+  }
+
+  private drawSniperBeam(enemy: Enemy, end: THREE.Vector3, color: number) {
+    const laser = enemy.laser
+    if (!laser) return
+    const attr = laser.geometry.getAttribute('position') as THREE.BufferAttribute
+    const start = enemy.parts.group.position
+    attr.setXYZ(0, start.x, start.y, start.z)
+    attr.setXYZ(1, end.x, end.y, end.z)
+    attr.needsUpdate = true
+    // The moving beam must not retain the original geometry's stale bounding sphere.
+    laser.geometry.computeBoundingSphere()
+    laser.material.color.setHex(color)
+    laser.material.opacity = 0.9
+  }
+
+  private updateSniper(enemy: Enemy, dt: number, player: THREE.Vector3, collidables: THREE.Object3D[]) {
+    if (dt <= 0) return
+    enemy.shotFlash = Math.max(0, (enemy.shotFlash ?? 0) - dt)
+    if (enemy.aimT < 0) {
+      enemy.aimT = Math.min(0, enemy.aimT + dt)
+      if (enemy.shotFlash > 0 && enemy.shotEnd) {
+        this.drawSniperBeam(enemy, enemy.shotEnd, 0x00f0ff)
+      } else if (enemy.laser) enemy.laser.material.opacity = 0
+      return
+    }
+    const start = enemy.parts.group.position
+    const target = enemy.hackTarget
+    if (target && (!this.enemies.includes(target) || target.hp <= 0)) {
+      delete enemy.hackTarget
+      enemy.aimT = -2.6
+      if (enemy.laser) enemy.laser.material.opacity = 0
+      return
+    }
+    const end = target ? target.parts.group.position : player
+    if (!target && (start.distanceTo(player) < 24 || this.losBlocked(start, player, collidables))) {
+      enemy.aimT = 0
+      if (enemy.laser) enemy.laser.material.opacity = 0
+      const retreat = start.clone().sub(player).setY(0).normalize()
+      if (start.distanceTo(player) < 24) start.addScaledVector(retreat, enemy.speed * dt)
+      return
+    }
+    const previous = enemy.aimT
+    const pan = this.host.sfxPan(start)
+    if (previous === 0) this.host.sfx.sniperAlert(pan, false)
+    enemy.aimT += dt
+    if (previous < URGENT_TIME && enemy.aimT >= URGENT_TIME && !target) this.host.sfx.sniperAlert(pan, true)
+    this.drawSniperBeam(enemy, end, target ? 0x00f0ff : enemy.aimT >= URGENT_TIME ? 0xffffff : 0xff2975)
+    if (enemy.aimT < AIM_TIME) return
+
+    if (target) {
+      // Resolve from the drone, not the player's camera; cover and intervening drones absorb the shot.
+      this.host.scene.updateMatrixWorld(true)
+      const direction = end.clone().sub(start)
+      this.raycaster.set(start, direction.clone().normalize())
+      this.raycaster.far = direction.length() + target.radius
+      const hit = this.raycaster.intersectObjects([
+        ...collidables, ...this.enemies.filter((e) => e !== enemy).map((e) => e.parts.proxy),
+      ], false)[0]
+      enemy.shotEnd = hit?.point.clone() ?? end.clone()
+      enemy.shotFlash = 0.16
+      this.drawSniperBeam(enemy, enemy.shotEnd, 0x00f0ff)
+      const victim = hit?.object.userData['enemy'] as Enemy | undefined
+      // Clear the command before kill callbacks can pause or advance the encounter.
+      delete enemy.hackTarget
+      enemy.aimT = -2.6
+      this.host.hitstop(0, 0.12)
+      this.host.addShake(0.35)
+      if (victim) this.damageEnemy(victim, enemy.damage, true)
+    } else {
+      enemy.aimT = -2.6
+      if (enemy.laser) enemy.laser.material.opacity = 0
+      this.host.damagePlayer(enemy.damage)
+    }
+    this.host.sfx.sniper(pan)
   }
 
   private losBlocked(a: THREE.Vector3, b: THREE.Vector3, collidables: THREE.Object3D[]): boolean {

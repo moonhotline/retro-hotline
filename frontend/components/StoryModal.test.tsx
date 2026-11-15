@@ -164,13 +164,15 @@ describe('StoryModal', () => {
       }))
     })
 
-    expect(container.textContent).toContain('CONTRABAND SUPPLIES')
-    expect(container.textContent).toContain('SCORE: 400 PTS')
+    expect(container.textContent).toContain('BLACK MARKET / 黑市')
+    expect(container.textContent).toContain('400 PTS')
+    expect(container.textContent).not.toContain('Welcome to the quiet side')
+    expect(container.textContent).not.toContain('Emergency bio-synthetic')
     expect(container.textContent).toContain('NANO REPAIR KIT')
     expect(container.textContent).toContain('OVERCLOCK TRIGGER')
 
     const buyButtons = container.querySelectorAll('button')
-    const nanoButton = Array.from(buyButtons).find((b) => b.textContent?.includes('BUY') && !b.disabled)
+    const nanoButton = Array.from(buyButtons).find((b) => b.textContent?.includes('购买') && !b.disabled)
     expect(nanoButton).toBeDefined()
     act(() => {
       nanoButton?.click()

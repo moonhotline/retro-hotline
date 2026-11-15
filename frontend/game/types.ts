@@ -38,7 +38,22 @@ export interface Popup {
   y: number // 0..1 vertical screen fraction
 }
 
+export interface SniperWarning {
+  id: string
+  bearing: number // radians: front 0, right PI/2, rear PI
+  progress: number
+  urgent: boolean
+  redirected: boolean
+}
+
+export interface SniperHackState {
+  warnings: SniperWarning[]
+  status: 'none' | 'aim' | 'blocked' | 'ready' | 'redirected' | 'cooldown'
+  cooldown: number
+}
+
 export interface HudState {
+  sniperHack?: SniperHackState
   status: GameStatus
   health: number
   maxHealth?: number
