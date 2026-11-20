@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import gsap from 'gsap'
 import type { PlayerProfile } from '../game/combat/storage'
 import { MUSIC_TRACKS } from '../game/music'
 import type { HudState } from '../game/types'
@@ -75,9 +76,9 @@ export function TrackBadge({ name = 'NEON COMBAT SUITE', bpm = 125 }: { name?: s
 }
 
 const CONTROL_GROUPS = [
-  { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide · ground only', 'C / CTRL']] },
-  { title: 'COMBAT', rows: [['Full-auto rifle · hold', 'LMB'], ['Hack shot / punch', 'F'], ['Punch / close execution', 'RMB'], ['Glory shatter · staggered target', 'E'], ['Reload / swap weapon', 'R / Q']] },
-  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Wall run / climb · air near wall', 'SPACE'], ['Tactical slide', 'C / CTRL']] },
+  { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide / Air Slam', 'C / CTRL']] },
+  { title: 'COMBAT', rows: [['Fire · rifle / scatter / rail', 'LMB'], ['Hack sniper / punch', 'F'], ['Punch / Sniper zoom', 'RMB'], ['Glory shatter · staggered', 'E'], ['Reload / swap weapon', 'R / Q / 1-4']] },
+  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Pulse parry · deflect fire', 'V'], ['Kinetic slam · airborne', 'C / G']] },
   { title: 'AUDIO & SYSTEM', rows: [['Cycle music track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
 ]
 
@@ -119,9 +120,11 @@ function CampusPreview() {
         </g>
         <path d="M220 315v-24l90-45 112 56v24l-90 45Z" fill="#0c2330" stroke="#a5f4fa" strokeWidth="1.5" />
         <path d="M220 291l112 56 90-45m-90 45v24M243 327v45m154-49v35" stroke="#a5f4fa" strokeOpacity=".65" />
-        <path d="M320 204l25 35-25 35-25-35Z" fill="#8fffd9" fillOpacity=".1" stroke="#a0ffdd" strokeWidth="1.5" />
-        <path d="M295 239h50m-25-35v70" stroke="#a0ffdd" strokeOpacity=".6" />
-        <circle cx="320" cy="239" r="49" stroke="#a0ffdd" strokeOpacity=".22" />
+        <g className="campus-crystal">
+          <path d="M320 204l25 35-25 35-25-35Z" fill="#8fffd9" fillOpacity=".14" stroke="#a0ffdd" strokeWidth="1.5" />
+          <path d="M295 239h50m-25-35v70" stroke="#a0ffdd" strokeOpacity=".65" />
+          <circle cx="320" cy="239" r="49" stroke="#a0ffdd" strokeOpacity=".26" />
+        </g>
         <path d="M35 380l96-48 79 39 70-35" stroke="#8be5ee" strokeDasharray="4 7" />
         <circle cx="131" cy="332" r="4" fill="#8be5ee" /><circle cx="280" cy="336" r="4" fill="#d5fffd" />
       </svg>
@@ -143,8 +146,10 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
   const [standby, setStandby] = useState(true)
   const [section, setSection] = useState<'games' | 'media'>('games')
   const [controls, setControls] = useState(false)
+  const [prismBoost, setPrismBoost] = useState(false)
   const [clock, setClock] = useState(new Date())
   const [online, setOnline] = useState(navigator.onLine)
+  const shellRef = useRef<HTMLDivElement>(null)
   const initializeRef = useRef<HTMLButtonElement>(null)
   const launchRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -179,6 +184,74 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
     else dialogRef.current?.close()
   }, [controls])
 
+  // GSAP choreographed motion timelines for Standby, Dashboard, and Media surfaces.
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return
+    const ctx = gsap.context(() => {
+      if (standby) {
+        const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
+        tl.from('.standby-status', { y: -16, opacity: 0, duration: 0.65 }, 0.05)
+          .from('.standby-center .console-eyebrow', { x: -22, opacity: 0, duration: 0.7 }, 0.14)
+          .from('.standby-title', { y: 34, opacity: 0, clipPath: 'inset(0 0 100% 0)', duration: 0.95 }, 0.2)
+          .from('.standby-protocol', { x: -16, opacity: 0, duration: 0.65 }, 0.42)
+          .from('.standby-glyphs span', { y: 16, opacity: 0, scale: 0.7, stagger: 0.08, duration: 0.55, ease: 'back.out(1.9)' }, 0.48)
+          .from('.standby-initialize', { y: 18, opacity: 0, duration: 0.72 }, 0.62)
+          .from('.standby-footer', { y: 14, opacity: 0, duration: 0.65 }, 0.74)
+
+        // Ambient breathing wave across the 4 PlayStation glyphs
+        gsap.to('.standby-glyphs span', {
+          y: -6,
+          color: '#e0fcff',
+          textShadow: '0 0 18px rgba(100, 238, 255, 0.85)',
+          duration: 1.05,
+          ease: 'sine.inOut',
+          stagger: { each: 0.22, repeat: -1, yoyo: true },
+          delay: 1.1,
+        })
+        // Subtle floating cadence on the CTA pill
+        gsap.to('.standby-initialize', {
+          boxShadow: '0 12px 34px rgba(85, 232, 255, 0.28)',
+          duration: 1.8,
+          ease: 'sine.inOut',
+          repeat: -1,
+          yoyo: true,
+          delay: 1.2,
+        })
+      } else if (section === 'games') {
+        const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
+        tl.from('.console-header', { y: -14, opacity: 0, duration: 0.55 }, 0)
+          .from('.console-tech span', { y: 10, opacity: 0, stagger: 0.055, duration: 0.5 }, 0.08)
+          .from('.protocol-edition', { x: -14, opacity: 0, duration: 0.55 }, 0.15)
+          .from('.console-title', { y: 24, opacity: 0, clipPath: 'inset(0 0 100% 0)', duration: 0.85 }, 0.18)
+          .from('.console-subtitle', { opacity: 0, y: 10, duration: 0.55 }, 0.34)
+          .from('.console-records > div', { y: 14, opacity: 0, stagger: 0.06, duration: 0.55 }, 0.38)
+          .from('.console-actions button', { y: 14, opacity: 0, stagger: 0.08, duration: 0.55 }, 0.48)
+          .from('.console-utilities', { opacity: 0, duration: 0.5 }, 0.58)
+          .from('.console-campus', { x: 26, opacity: 0, duration: 0.85 }, 0.24)
+          .from('.console-activities article', { y: 22, opacity: 0, stagger: 0.09, duration: 0.65, ease: 'power3.out' }, 0.5)
+
+        gsap.to('.console-campus > svg', {
+          y: -7,
+          duration: 3.2,
+          ease: 'sine.inOut',
+          repeat: -1,
+          yoyo: true,
+        })
+        gsap.to('.campus-crystal', {
+          opacity: 0.65,
+          duration: 1.7,
+          ease: 'sine.inOut',
+          repeat: -1,
+          yoyo: true,
+        })
+      } else {
+        gsap.from('.console-media > *', { y: 18, opacity: 0, stagger: 0.07, duration: 0.6, ease: 'expo.out' })
+      }
+    }, shell)
+    return () => ctx.revert()
+  }, [standby, section])
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return
@@ -204,9 +277,10 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
   }, [standby, controls, wake, back, onStart, onAudio, onTrack])
 
   return (
-    <div className="ps5-standby-screen console-shell" data-ps5-phase={standby ? 'standby' : 'dashboard'}>
+    <div ref={shellRef} className="ps5-standby-screen console-shell" data-ps5-phase={standby ? 'standby' : 'dashboard'}>
       <div className="console-atmosphere" aria-hidden="true">
-      {standby ? <MistAtmosphere /> : <>
+      <MistAtmosphere bpm={hud.musicTrackBpm} variant={standby ? 'standby' : 'dashboard'} energyBoost={prismBoost} />
+      {!standby && <>
       <div className="ps5-ambient-ribbon" aria-hidden="true" />
       <svg className="console-ribbons" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none" aria-hidden="true">
         <path d="M-200 740C300 100 650 1230 1650 170" stroke="#3db4d9" strokeWidth="38" opacity=".06" />
@@ -223,7 +297,15 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
             <h1 className="standby-title font-orbitron">RETRO<br className="standby-break" /> HOTLINE</h1>
             <p className="standby-protocol">// SILICON VALLEY PROTOCOL</p>
             <div className="standby-glyphs" aria-hidden="true"><span>✕</span><span>○</span><span>△</span><span>◻︎</span></div>
-            <button ref={initializeRef} type="button" className="console-primary standby-initialize" aria-keyshortcuts="Enter Space X" onClick={wake}>PRESS [✕ / ENTER] TO INITIALIZE</button>
+            <button
+              ref={initializeRef}
+              type="button"
+              className="console-primary standby-initialize"
+              aria-keyshortcuts="Enter Space X"
+              onMouseEnter={() => setPrismBoost(true)}
+              onMouseLeave={() => setPrismBoost(false)}
+              onClick={wake}
+            >PRESS [✕ / ENTER] TO INITIALIZE</button>
           </div>
           <footer className="standby-footer"><span>PROCEDURAL WEBAUDIO</span><TrackBadge name={hud.musicTrackName} bpm={hud.musicTrackBpm} /><span>PRESS N TO CHANGE TRACK</span></footer>
         </main>
@@ -243,7 +325,7 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
                     <h1 id="console-game-title" className="console-title font-orbitron">RETRO<br />HOTLINE<span className="title-period">.</span></h1>
                     <p className="console-subtitle">BAY AREA & SILICON VALLEY CYBER-SECTOR <span>· 1989 / 2089</span></p>
                     <dl className="console-records" aria-label="Personal records">{[['HIGH SCORE', profile.highScore], ['MAX WAVE', profile.maxWave], ['TOTAL KILLS', profile.totalKills], ['GLORY KILLS', profile.totalGloryKills]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{Number(value).toLocaleString()}</dd></div>)}</dl>
-                    <div className="console-actions"><button ref={launchRef} type="button" className="console-primary" aria-keyshortcuts="X Enter" onClick={onStart}><span aria-hidden="true">✕</span> LAUNCH PROTOCOL</button><button type="button" className="console-secondary" aria-haspopup="dialog" aria-keyshortcuts="C" onClick={() => setControls(true)}><span aria-hidden="true">◻︎</span> CONTROLS & TACTICS</button></div>
+                    <div className="console-actions"><button ref={launchRef} type="button" className="console-primary" aria-keyshortcuts="X Enter" onMouseEnter={() => setPrismBoost(true)} onMouseLeave={() => setPrismBoost(false)} onClick={onStart}><span aria-hidden="true">✕</span> LAUNCH PROTOCOL</button><button type="button" className="console-secondary" aria-haspopup="dialog" aria-keyshortcuts="C" onClick={() => setControls(true)}><span aria-hidden="true">◻︎</span> CONTROLS & TACTICS</button></div>
                     <div className="console-utilities"><button type="button" aria-keyshortcuts="O Escape" onClick={() => setStandby(true)}><span aria-hidden="true">○</span> STANDBY</button><button type="button" aria-keyshortcuts="M" aria-pressed={!hud.muted} onClick={onAudio}><span aria-hidden="true">△</span> AUDIO: {hud.muted ? 'OFF' : 'ON'}</button></div>
                   </div>
                   <CampusPreview />

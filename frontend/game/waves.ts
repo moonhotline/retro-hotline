@@ -7,7 +7,7 @@ import {
   type DroneParts,
 } from './effects'
 import { resolveWalls, type Wall } from './map'
-import type { DroneType, SniperHackState } from './types'
+import type { BossHudState, DroneType, SniperHackState, WaveProtocolState } from './types'
 import type { Sfx } from './audio'
 import type { Particles } from './effects'
 import type { HackManager, NeonHack } from './combat/modifiers'
@@ -33,6 +33,10 @@ export interface Enemy {
   frozenTimer?: number
   burnTimer?: number
   burnTick?: number
+  maxHp?: number
+  bossPhase?: 1 | 2 | 3
+  phase3Summoned?: boolean
+  shieldTarget?: Enemy
 }
 
 export interface Projectile {
@@ -56,6 +60,8 @@ export interface CombatHost {
   shockwave(pos: THREE.Vector3, color: number, scale: number): void
   damagePlayer(n: number): void
   onKill(type: DroneType, pos: THREE.Vector3, byPlayer: boolean): void
+  onFrozenKill?(pos: THREE.Vector3): void
+  onBossPhaseChange?(phase: 2 | 3): void
   onGloryKill(pos: THREE.Vector3): void
   onWaveStart(wave: number): void
   onWaveClear(): void
@@ -80,6 +86,12 @@ const AIM_TIME = 1.15
 const URGENT_TIME = AIM_TIME - 0.35
 const HACK_COOLDOWN = 6
 
+const WAVE_PROTOCOLS: readonly WaveProtocolState[] = [
+  { id: 'overclock', label: 'OVERCLOCK SURGE', detail: '+20% TEMPO · HIGH ENERGY', accent: '#ff9f1c' },
+  { id: 'aegis', label: 'AEGIS PHALANX', detail: 'BREAK SHIELD WEAVERS FIRST', accent: '#39ff88' },
+  { id: 'prism', label: 'PRISM STORM', detail: 'HIGH-INTENSITY INTERCEPT', accent: '#00f0ff' },
+]
+
 /** Owns enemies, ranged projectiles, spawn pacing and wave composition. */
 export class WaveDirector {
   wave = 0
@@ -91,11 +103,28 @@ export class WaveDirector {
   private spawnTimer = 0
   private raycaster = new THREE.Raycaster()
   private hackCooldown = 0
+  private protocol: WaveProtocolState | null = null
 
   constructor(private host: CombatHost) {}
 
   get remaining(): number {
     return this.queue.length + this.enemies.length
+  }
+
+  activeProtocol(): WaveProtocolState | null {
+    return this.protocol
+  }
+
+  activeBossHud(): BossHudState | null {
+    const boss = this.enemies.find((e) => e.type === 'boss' && e.hp > 0)
+    if (!boss) return null
+    const maxHp = boss.maxHp ?? DRONE_STATS.boss.hp
+    return {
+      name: DRONE_STATS.boss.label,
+      hp: Math.max(0, Math.ceil(boss.hp)),
+      maxHp,
+      phase: boss.bossPhase ?? 1,
+    }
   }
 
   clearEnemies() {
@@ -125,6 +154,7 @@ export class WaveDirector {
     this.projectiles = []
     this.queue = []
     this.wave = 0
+    this.protocol = null
     this.intermission = 2.2
   }
 
@@ -136,11 +166,12 @@ export class WaveDirector {
     return this.enemies.map((e) => e.parts.proxy)
   }
 
-  /** ignoreShield bypasses the Enforcer's front plating (deagle / melee). */
+  /** ignoreShield bypasses armor plating and Aegis shields (deagle / sniper / prism / melee). */
   damageEnemy(enemy: Enemy, dmg: number, ignoreShield = false): boolean {
     if (!this.enemies.includes(enemy)) return false
-    if (!ignoreShield && (enemy.type === 'enforcer' || enemy.type === 'boss')) {
-      dmg *= 0.35 // pulse rifle pings off armor
+    const aegisProtected = this.enemies.some((e) => e.type === 'aegis' && e.hp > 0 && e.staggerTimer <= 0 && e.shieldTarget === enemy)
+    if (!ignoreShield && (enemy.type === 'enforcer' || enemy.type === 'boss' || aegisProtected)) {
+      dmg *= 0.35 // pulse rifle pings off armor or active Aegis weave
     }
     enemy.hp -= dmg
     enemy.flash = 0.3
@@ -148,8 +179,18 @@ export class WaveDirector {
       this.explodeEnemy(enemy, true)
       return true
     }
-    const stats = DRONE_STATS[enemy.type]
-    if (enemy.hp <= Math.max(1.2, stats.hp * 0.28)) this.staggerEnemy(enemy)
+    const maxHp = enemy.maxHp ?? DRONE_STATS[enemy.type].hp
+    if (enemy.type === 'boss') {
+      const nextPhase: 1 | 2 | 3 = enemy.hp <= maxHp * 0.33 ? 3 : enemy.hp <= maxHp * 0.66 ? 2 : 1
+      if (nextPhase > (enemy.bossPhase ?? 1)) {
+        enemy.bossPhase = nextPhase
+        this.host.shockwave?.(enemy.parts.group.position, nextPhase === 3 ? 0xff2244 : 0xffd319, 12)
+        this.host.addShake?.(0.65)
+        this.host.sfx?.roar?.(this.host.sfxPan(enemy.parts.group.position))
+        this.host.onBossPhaseChange?.(nextPhase as 2 | 3)
+      }
+    }
+    if (enemy.hp <= Math.max(1.2, maxHp * 0.28)) this.staggerEnemy(enemy)
     return false
   }
 
@@ -263,6 +304,10 @@ export class WaveDirector {
     e.parts.outer.rotation.z += dt * 3
     e.parts.inner.rotation.z -= dt * 5
     if (e.parts.frame) e.parts.frame.rotation.z += dt * 1.5
+    if (e.parts.hull) {
+      e.parts.hull.rotation.y += dt * (e.type === 'boss' ? 1.4 : 2.1)
+      e.parts.hull.rotation.x += dt * 0.9
+    }
     e.flash = Math.max(0, e.flash - dt)
     const pop = 1 + e.flash * 0.9
     e.parts.core.scale.set(e.radius * 2.2 * pop, e.radius * 2.2 * pop, 1)
@@ -326,28 +371,79 @@ export class WaveDirector {
         g.position.addScaledVector(side, Math.sin(t * 1.7 + e.phase) * dt * strafeAmp)
         g.position.y += Math.sin(t * 2.6 + e.phase) * dt * 1.2
 
-        // Enforcer / boss: shotgun volley
+        // Enforcer / boss: shotgun volley & multi-phase boss spiral patterns
         if (e.type === 'enforcer' || e.type === 'boss') {
+          if (e.type === 'boss' && (e.bossPhase ?? 1) === 3 && !e.phase3Summoned) {
+            e.phase3Summoned = true
+            this.spawnEnemy('swarm')
+            this.spawnEnemy('swarm')
+          }
           e.fireT -= dt
           if (e.fireT < 0.45 && e.fireT > 0) {
             // telegraph: pulse the core
             e.parts.core.scale.setScalar(e.radius * 2.6)
           }
-          if (e.fireT <= 0 && dist < 22 && !this.losBlocked(g.position, pp, collidables)) {
-            const pellets = e.type === 'boss' ? 8 : 5
-            for (let k = 0; k < pellets; k++) {
-              const spread = THREE.MathUtils.randFloatSpread(0.7)
-              const v = dir
-                .clone()
-                .applyAxisAngle(new THREE.Vector3(0, 1, 0), spread)
-                .setY(0)
-                .normalize()
-              this.spawnProjectile(g.position, v, 18, 5, 0xb18cff)
+          if (e.fireT <= 0 && dist < (e.type === 'boss' ? 42 : 22) && !this.losBlocked(g.position, pp, collidables)) {
+            const bossPhase = e.bossPhase ?? 1
+            if (e.type === 'boss' && bossPhase >= 2) {
+              // Phase II & III: 360-degree radial spiral ring (high reward for Pulse Parry!)
+              const ringCount = bossPhase === 3 ? 12 : 8
+              const ringSpeed = bossPhase === 3 ? 22 : 17
+              const ringColor = bossPhase === 3 ? 0xff2244 : 0xffd319
+              for (let k = 0; k < ringCount; k++) {
+                const a = (k / ringCount) * Math.PI * 2 + t * 1.4
+                const v = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+                this.spawnProjectile(g.position, v, ringSpeed, 7, ringColor)
+              }
+              this.host.sfx.shotgun(pan)
+              this.host.addShake(0.32)
+              e.fireT = bossPhase === 3 ? 1.55 : 2.0
+            } else {
+              const pellets = e.type === 'boss' ? 8 : 5
+              for (let k = 0; k < pellets; k++) {
+                const spread = THREE.MathUtils.randFloatSpread(0.7)
+                const v = dir
+                  .clone()
+                  .applyAxisAngle(new THREE.Vector3(0, 1, 0), spread)
+                  .setY(0)
+                  .normalize()
+                this.spawnProjectile(g.position, v, 18, 5, 0xb18cff)
+              }
+              this.host.sfx.shotgun(pan)
+              this.host.addShake(0.25)
+              e.fireT = e.type === 'boss' ? 2.2 : 3.4
             }
-            this.host.sfx.shotgun(pan)
-            this.host.addShake(0.25)
-            e.fireT = e.type === 'boss' ? 2.2 : 3.4
           }
+        }
+        break
+      }
+      case 'support': {
+        // Aegis Weaver: orbit nearest combat ally and project a shield tether
+        let ally: Enemy | null = null
+        let bestDist = Infinity
+        for (const other of this.enemies) {
+          if (other === e || other.type === 'aegis' || other.hp <= 0) continue
+          const d2 = other.parts.group.position.distanceToSquared(g.position)
+          if (d2 < bestDist) {
+            bestDist = d2
+            ally = other
+          }
+        }
+        e.shieldTarget = ally ?? undefined
+        if (ally) {
+          const toAlly = tmpC.subVectors(ally.parts.group.position, g.position)
+          const dAlly = toAlly.length()
+          if (dAlly > 8) move(toAlly.normalize(), e.speed)
+          else {
+            const orbit = new THREE.Vector3(-dir.z, 0, dir.x)
+            g.position.addScaledVector(orbit, e.speed * 0.55 * dt)
+          }
+          g.position.y = THREE.MathUtils.lerp(g.position.y, ally.parts.group.position.y + 2.2, Math.min(1, dt * 3))
+          this.drawSniperBeam(e, ally.parts.group.position, 0x39ff88)
+        } else {
+          // Solo fallback: keep mid-range orbit
+          if (dist > 20) move(dir, e.speed)
+          if (e.laser) e.laser.material.opacity = 0
         }
         break
       }
@@ -566,6 +662,13 @@ export class WaveDirector {
 
   private beginWave(n: number) {
     this.wave = n
+    if (n % 4 === 0) {
+      this.protocol = { id: 'boss', label: 'APEX LOCKDOWN', detail: '3-PHASE BOSS ENCOUNTER', accent: '#ff2975' }
+    } else if (n >= 2) {
+      this.protocol = WAVE_PROTOCOLS[(n - 2) % WAVE_PROTOCOLS.length] ?? null
+    } else {
+      this.protocol = null
+    }
     this.queue = this.buildQueue(n)
     this.spawnTimer = 0.8
     this.host.onWaveStart(n)
@@ -580,11 +683,13 @@ export class WaveDirector {
     const gunners = wave >= 2 ? Math.floor(total * 0.25) : 0
     const marksmen = wave >= 2 ? 1 + Math.floor(wave / 4) : 0
     const enforcers = wave >= 3 ? 1 + Math.floor((wave - 3) / 2) : 0
+    const aegises = wave >= 3 ? Math.min(2, 1 + Math.floor((wave - 3) / 3)) : 0
     for (let i = 0; i < brawlers; i++) q.push('brawler')
     for (let i = 0; i < swarms; i++) q.push('swarm')
     for (let i = 0; i < gunners; i++) q.push('gunner')
     for (let i = 0; i < marksmen; i++) q.push('marksman')
     for (let i = 0; i < enforcers; i++) q.push('enforcer')
+    for (let i = 0; i < aegises; i++) q.push('aegis')
     if (bossWave) q.push('boss')
     // Shuffle
     for (let i = q.length - 1; i > 0; i--) {
@@ -604,6 +709,8 @@ export class WaveDirector {
       type,
       parts,
       hp: st.hp,
+      maxHp: st.hp,
+      bossPhase: type === 'boss' ? 1 : undefined,
       speed: st.speed + Math.min(waveScale(this.wave), 2.5) * 0.5 + Math.random(),
       damage: st.damage,
       radius: st.radius,
@@ -622,11 +729,11 @@ export class WaveDirector {
     parts.proxy.userData['enemy'] = enemy
     parts.group.position.copy(pos)
     parts.group.position.y = Math.max(pos.y, st.height + this.host.playerPos().y - 1)
-    if (type === 'marksman') {
-      const laser = makeLaserLine(0xff2975)
+    if (type === 'marksman' || type === 'aegis') {
+      const laser = makeLaserLine(type === 'aegis' ? 0x39ff88 : 0xff2975)
       this.host.scene.add(laser)
       enemy.laser = laser
-      parts.group.position.y = Math.max(parts.group.position.y, 8)
+      if (type === 'marksman') parts.group.position.y = Math.max(parts.group.position.y, 8)
     }
     this.host.scene.add(parts.group)
     this.enemies.push(enemy)
@@ -663,7 +770,9 @@ export class WaveDirector {
     const dist = pos.distanceTo(pp)
     this.host.addShake(Math.max(0.15, (big ? 0.9 : 0.5) - dist * 0.004))
 
+    const wasFrozen = (enemy.frozenTimer ?? 0) > 0
     this.host.onKill(enemy.type, pos, byPlayer)
+    if (byPlayer && wasFrozen) this.host.onFrozenKill?.(pos)
 
     if (this.queue.length === 0 && this.enemies.length === 0) {
       this.intermission = 3.2

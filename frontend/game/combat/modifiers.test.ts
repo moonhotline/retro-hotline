@@ -26,13 +26,20 @@ function gloryContext(enemies: Enemy[]): GloryKillContext {
 const shot = { position: new THREE.Vector3(), kind: 'bullet' as const, ignoreShield: false }
 
 describe('HackManager build and draft', () => {
-  it('defines exactly the 5 streamlined hacks with their specified tiers and card copy', () => {
+  it('defines the 12 expanded build-defining hacks with their specified tiers and card copy', () => {
     expect(NEON_HACKS.map(({ id, tier }) => [id, tier])).toEqual([
       ['freeze', 'RARE'],
       ['burn', 'RARE'],
       ['attack_speed', 'COMMON'],
       ['max_hp', 'COMMON'],
       ['move_speed', 'COMMON'],
+      ['prism_ricochet', 'RARE'],
+      ['chain_arc', 'OVERCLOCK'],
+      ['parry_overclock', 'RARE'],
+      ['slam_quake', 'RARE'],
+      ['chrono_focus', 'OVERCLOCK'],
+      ['cryo_shatter', 'OVERCLOCK'],
+      ['vamp_surge', 'COMMON'],
     ])
     for (const hack of NEON_HACKS) {
       expect(hack.name).toContain(' // ')
@@ -86,15 +93,16 @@ describe('HackManager build and draft', () => {
 
   it('handles remaining pool exhaustion gracefully', () => {
     const manager = new HackManager()
-    for (const hack of NEON_HACKS.slice(0, 3)) manager.apply(hack.id)
+    const total = NEON_HACKS.length
+    for (const hack of NEON_HACKS.slice(0, total - 2)) manager.apply(hack.id)
     expect(manager.getRandomDraft()).toHaveLength(2)
-    manager.apply(NEON_HACKS[3]!.id)
-    expect(manager.getRandomDraft()).toEqual([NEON_HACKS[4]])
-    manager.apply(NEON_HACKS[4]!.id)
+    manager.apply(NEON_HACKS[total - 2]!.id)
+    expect(manager.getRandomDraft()).toEqual([NEON_HACKS[total - 1]])
+    manager.apply(NEON_HACKS[total - 1]!.id)
     expect(manager.getRandomDraft()).toEqual([])
   })
 
-  it.each([[1, 1], [2.9, 2], [99, 5], [0, 0], [-1, 0], [NaN, 0], [Infinity, 0]])(
+  it.each([[1, 1], [2.9, 2], [99, NEON_HACKS.length], [0, 0], [-1, 0], [NaN, 0], [Infinity, 0]])(
     'bounds requested count %s to %s', (count, expected) => {
       expect(new HackManager().getRandomDraft(count)).toHaveLength(expected)
     })
@@ -164,10 +172,57 @@ describe('stat modifiers: attack speed, max HP, move speed', () => {
     expect(manager.speedMultiplier).toBeCloseTo(1.3)
   })
 
-  it('glory kills reset dash cooldown', () => {
+  it('glory kills reset dash cooldown and chain lightning with chain_arc', () => {
     const manager = new HackManager()
-    const context = gloryContext([])
+    const a = enemy(4)
+    const b = enemy(8)
+    const far = enemy(30)
+    const context = gloryContext([a, b, far])
     manager.onGloryKill(new THREE.Vector3(), context)
     expect(context.resetDashCooldown).toHaveBeenCalledOnce()
+    expect(context.damageEnemy).not.toHaveBeenCalled()
+
+    manager.apply('chain_arc')
+    const res = manager.onGloryKill(new THREE.Vector3(), context)
+    expect(res.chainedEnemies).toEqual([a, b])
+    expect(context.damageEnemy).toHaveBeenCalledTimes(2)
+    expect(context.arc).toHaveBeenCalledTimes(2)
+  })
+
+  it('activates prism ricochet, parry overclock, slam quake, chrono focus, cryo shatter and vamp surge', () => {
+    const manager = new HackManager()
+    const primary = enemy(0)
+    const nearby = enemy(8)
+    const ctx = hitContext([primary, nearby])
+
+    manager.apply('prism_ricochet')
+    manager.onHit(primary, 10, shot, ctx)
+    expect(ctx.damageEnemy).toHaveBeenCalledWith(nearby, 6.5, true)
+    expect(ctx.arc).toHaveBeenCalledOnce()
+
+    manager.apply('parry_overclock')
+    const refillMagazine = vi.fn()
+    const grantOvercharge = vi.fn()
+    manager.onParry({ refillMagazine, grantOvercharge })
+    expect(refillMagazine).toHaveBeenCalledOnce()
+    expect(grantOvercharge).toHaveBeenCalledWith(3.5)
+
+    manager.apply('slam_quake')
+    const slam = { radius: 12, staggerAll: false }
+    manager.onSlam(slam)
+    expect(slam).toEqual({ radius: 18, staggerAll: true })
+
+    manager.apply('chrono_focus')
+    expect(manager.chronoDamageMultiplier(0.1)).toBe(1.7)
+    expect(manager.chronoDamageMultiplier(1.0)).toBe(1)
+
+    manager.apply('cryo_shatter')
+    const shatterCtx = hitContext([nearby])
+    expect(manager.onFrozenKill(new THREE.Vector3(0, 0, 0), shatterCtx)).toBe(1)
+    expect(shatterCtx.damageEnemy).toHaveBeenCalledWith(nearby, 5.5, true)
+
+    manager.apply('vamp_surge')
+    expect(manager.killHealAmount(2)).toBe(0)
+    expect(manager.killHealAmount(3)).toBe(6)
   })
 })

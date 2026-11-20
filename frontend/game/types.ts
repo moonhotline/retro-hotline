@@ -2,10 +2,24 @@ import type { NeonHack } from './combat/modifiers'
 
 export type GameStatus = 'menu' | 'playing' | 'paused' | 'over'
 export type Mood = 'menu' | 'combat'
-export type DroneType = 'swarm' | 'brawler' | 'gunner' | 'enforcer' | 'marksman' | 'boss'
-export type WeaponId = 'rifle' | 'deagle' | 'sniper'
+export type DroneType = 'swarm' | 'brawler' | 'gunner' | 'enforcer' | 'marksman' | 'aegis' | 'boss'
+export type WeaponId = 'rifle' | 'deagle' | 'prism' | 'sniper'
 export type PickupKind = 'heal' | 'gem' | 'stash' | 'overcharge'
 export type PopupKind = 'score' | 'crit' | 'heal' | 'gem'
+
+export interface BossHudState {
+  name: string
+  hp: number
+  maxHp: number
+  phase: 1 | 2 | 3
+}
+
+export interface WaveProtocolState {
+  id: string
+  label: string
+  detail: string
+  accent: string
+}
 
 export interface ShopItemData {
   id: string
@@ -94,6 +108,8 @@ export interface HudState {
   isAiming?: boolean
   unlockedWeapons?: WeaponId[]
   pointerLocked?: boolean
+  bossHud?: BossHudState | null
+  waveProtocol?: WaveProtocolState | null
   storyModal?: {
     open: boolean
     entityId: string

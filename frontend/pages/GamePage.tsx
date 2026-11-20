@@ -48,11 +48,14 @@ const INITIAL_HUD: HudState = {
 
 const ABILITY_INFO: { id: keyof AbilityStates; key: string; label: string }[] = [
   { id: 'phaseDash', key: 'SHIFT', label: 'PHASE DASH' },
+  { id: 'pulseParry', key: 'V', label: 'PULSE PARRY' },
+  { id: 'kineticSlam', key: 'AIR C', label: 'KINETIC SLAM' },
 ]
 
 const WEAPON_INFO: Record<WeaponId, string> = {
   rifle: 'PULSE RIFLE',
   deagle: 'DESERT EAGLE',
+  prism: 'PRISM SCATTER',
   sniper: 'GAUSS SNIPER',
 }
 
@@ -163,7 +166,7 @@ export function Hud({ hud }: { hud: HudState }) {
       )}
 
       {hud.status === 'playing' && hud.pointerLocked === false && !hud.draftOpen && !hud.storyModal?.open && (
-        <div className="pointer-events-none absolute left-1/2 bottom-[24%] -translate-x-1/2 rounded-full border border-[#00f0ff]/50 bg-[#060810]/90 px-4 py-1.5 font-orbitron text-xs font-bold tracking-widest text-[#00f0ff] shadow-[0_0_16px_rgba(0,240,255,0.4)] backdrop-blur-md animate-pulse">
+        <div className="pointer-events-none absolute left-1/2 bottom-[31%] -translate-x-1/2 rounded-full border border-[#00f0ff]/50 bg-[#060810]/90 px-4 py-1.5 font-orbitron text-xs font-bold tracking-widest text-[#00f0ff] shadow-[0_0_16px_rgba(0,240,255,0.4)] backdrop-blur-md animate-pulse">
           [ CLICK TO LOCK MOUSE // 点击画面锁定准星 ]
         </div>
       )}
@@ -268,6 +271,38 @@ export function Hud({ hud }: { hud: HudState }) {
         <div className="font-tech text-[11px] text-white/50">
           {hud.roomName ? `${hud.roomName} · ` : ''}HOSTILES {hud.remaining}
         </div>
+        {hud.waveProtocol && !hud.bossHud && (
+          <div
+            className="mt-1.5 inline-flex items-center gap-2 rounded-full border bg-[#060810]/85 px-3 py-0.5 font-tech text-[10px] tracking-[0.18em] backdrop-blur-md"
+            style={{ borderColor: `${hud.waveProtocol.accent}66`, color: hud.waveProtocol.accent }}
+          >
+            <span>{hud.waveProtocol.label}</span>
+            <span className="text-white/50">{hud.waveProtocol.detail}</span>
+          </div>
+        )}
+        {hud.bossHud && (
+          <div className="mt-2 w-[min(360px,82vw)] rounded-lg border border-[#ff2975]/45 bg-[#060810]/90 px-3.5 py-2 backdrop-blur-md">
+            <div className="mb-1 flex items-center justify-between font-orbitron text-[10px] font-bold tracking-[0.2em]">
+              <span className="text-[#ff2975]">{hud.bossHud.name}</span>
+              <span className="font-tech text-white/75">
+                PHASE {hud.bossHud.phase === 1 ? 'I' : hud.bossHud.phase === 2 ? 'II' : 'III'} · {hud.bossHud.hp}/{hud.bossHud.maxHp}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full transition-[width] duration-150"
+                style={{
+                  width: `${Math.max(0, Math.min(100, (hud.bossHud.hp / Math.max(1, hud.bossHud.maxHp)) * 100))}%`,
+                  background: hud.bossHud.phase === 3
+                    ? 'linear-gradient(90deg,#ff2975,#ffd319)'
+                    : hud.bossHud.phase === 2
+                      ? 'linear-gradient(90deg,#b95cff,#ff2975)'
+                      : 'linear-gradient(90deg,#00f0ff,#b95cff)',
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* score */}
@@ -323,7 +358,7 @@ export function Hud({ hud }: { hud: HudState }) {
       {/* weapon + ammo */}
       <div className="absolute bottom-4 right-4 text-right">
         <div className="mb-2 flex items-center justify-end gap-1.5">
-          {(hud.unlockedWeapons || (['rifle', 'deagle'] as const)).map((id) => {
+          {(hud.unlockedWeapons || (['rifle', 'deagle', 'prism'] as const)).map((id) => {
             const active = hud.weapon === id
             return (
               <span
@@ -332,9 +367,11 @@ export function Hud({ hud }: { hud: HudState }) {
                   active
                     ? id === 'sniper'
                       ? 'border border-[#ff0055] text-[#ff0055] bg-[#ff0055]/15 shadow-[0_0_8px_#ff0055]'
-                      : id === 'deagle'
-                        ? 'weapon-pill-active-gold'
-                        : 'weapon-pill-active'
+                      : id === 'prism'
+                        ? 'border border-[#4dffd2] text-[#9ffcff] bg-[#29e3ff]/15 shadow-[0_0_10px_rgba(41,227,255,0.45)]'
+                        : id === 'deagle'
+                          ? 'weapon-pill-active-gold'
+                          : 'weapon-pill-active'
                     : ''
                 }`}
               >
@@ -366,7 +403,7 @@ export function Hud({ hud }: { hud: HudState }) {
           </div>
         )}
         <div className="font-tech text-[10px] uppercase tracking-widest text-white/35">
-          Q SWAP · F HACK / PUNCH · E GLORY KILL
+          Q / 1-4 SWAP · V PARRY · F HACK · E GLORY KILL
         </div>
       </div>
     </div>

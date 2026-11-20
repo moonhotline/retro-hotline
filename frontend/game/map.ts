@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { edgeBox, ghostBox, makeGlowSprite } from './effects'
+import { edgeBox, ghostBox, makeGlowSprite, skyscraperWindowTexture, solidEdgeBox, type HazardKind } from './effects'
 
 /**
  * Bay Area arena: bridge, neon arcade plaza, logistics courtyard and the
@@ -27,10 +27,28 @@ export interface WalkRect {
   top: number
 }
 
+export interface BoostStrip {
+  x: number
+  z: number
+  hw: number
+  hd: number
+  dirX: number
+  dirZ: number
+}
+
+export interface HazardSpot {
+  x: number
+  y: number
+  z: number
+  kind: HazardKind
+}
+
 export interface Zones {
   walls: Wall[]
   walkRects: WalkRect[]
   pads: JumpPad[]
+  boostStrips: BoostStrip[]
+  hazardSpots: HazardSpot[]
   update: (t: number) => void
   randomSpawnPoint: (playerPos: THREE.Vector3) => THREE.Vector3
 }
@@ -76,35 +94,23 @@ export function resolveWalls(
   }
 }
 
-const TRUNK = 0x3a1f5c
-const FROND = 0xff2975
-
-function makePalm(x: number, z: number, scale = 1): THREE.Group {
+/** Sleek architectural cyber-streetlamp pylon with soft cyan luminaire. */
+function makeStreetlamp(x: number, z: number, scale = 1): THREE.Group {
   const g = new THREE.Group()
-  const trunkMat = new THREE.LineBasicMaterial({ color: TRUNK })
-  const tipMat = new THREE.LineBasicMaterial({ color: FROND })
-  const pts: THREE.Vector3[] = []
-  let px = 0
-  let py = 0
-  for (let i = 0; i < 6; i++) {
-    pts.push(new THREE.Vector3(px, py, 0))
-    py += 0.9 * scale
-    px += 0.28 * scale
-  }
-  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), trunkMat))
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2
-    const dir = new THREE.Vector3(Math.cos(a), 0.4, Math.sin(a)).normalize()
-    const mid = new THREE.Vector3(px, py, 0).addScaledVector(dir, 1.7 * scale)
-    const end = mid.clone()
-    end.y -= 1.2 * scale
-    g.add(
-      new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(px, py, 0), mid, end]),
-        i % 2 === 0 ? tipMat : trunkMat
-      )
-    )
-  }
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a263d, metalness: 0.8, roughness: 0.35 })
+  const h = 5.4 * scale
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, h, 8), poleMat)
+  pole.position.y = h / 2
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.1 * scale, 0.08, 0.12), poleMat)
+  arm.position.set(0.45 * scale, h, 0)
+  const lamp = new THREE.Mesh(
+    new THREE.BoxGeometry(0.55 * scale, 0.06, 0.16),
+    new THREE.MeshBasicMaterial({ color: 0x9ef4ff })
+  )
+  lamp.position.set(0.72 * scale, h - 0.05, 0)
+  const halo = makeGlowSprite(0x38e8ff, 3.2 * scale, 0.42)
+  halo.position.set(0.72 * scale, h - 0.25, 0)
+  g.add(pole, arm, lamp, halo)
   g.position.set(x, 0.6, z)
   return g
 }
@@ -142,7 +148,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     scene.add(ghost)
     collidables.push(ghost)
     if (visual) {
-      const e = edgeBox(w, h, d, color)
+      const e = solidEdgeBox(w, h, d, color, 0.36, 0x111a2c, 1)
       e.position.set(x, h / 2 + 0.3, z)
       scene.add(e)
     }
@@ -195,14 +201,29 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   gantry(120, 8.5, 'north-tower-gantry', 0x00f0ff)
   gantry(0, 6, 'mid-bridge-skybridge', 0xff2975)
 
-  /** Dim violet floor grid with a bright perimeter outline. */
+  /** Dark architectural slate plaza deck with subtle inlaid grid and perimeter LED trim. */
   const floorGrid = (
     x0: number,
     x1: number,
     z0: number,
     z1: number,
-    rim = 0xff2975
+    rim = 0x38e8ff
   ) => {
+    const deckSlab = new THREE.Mesh(
+      new THREE.PlaneGeometry(x1 - x0, z1 - z0),
+      new THREE.MeshStandardMaterial({
+        color: 0x0b1222,
+        roughness: 0.62,
+        metalness: 0.45,
+        polygonOffset: true,
+        polygonOffsetFactor: 2,
+        polygonOffsetUnits: 2,
+      })
+    )
+    deckSlab.rotation.x = -Math.PI / 2
+    deckSlab.position.set((x0 + x1) / 2, 0.59, (z0 + z1) / 2)
+    scene.add(deckSlab)
+
     const pairs: number[] = []
     for (let x = x0; x <= x1 + 0.01; x += 8) pairs.push(x, 0.62, z0, x, 0.62, z1)
     for (let z = z0; z <= z1 + 0.01; z += 8) pairs.push(x0, 0.62, z, x1, 0.62, z)
@@ -211,7 +232,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
         'position',
         new THREE.Float32BufferAttribute(pairs, 3)
       ),
-      new THREE.LineBasicMaterial({ color: 0x5a2b8a, transparent: true, opacity: 0.55 })
+      new THREE.LineBasicMaterial({ color: 0x263c5e, transparent: true, opacity: 0.32 })
     )
     scene.add(grid)
     // Perimeter
@@ -221,7 +242,7 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
       x1, 0.62, z1, x0, 0.62, z1,
       x0, 0.62, z1, x0, 0.62, z0,
     ]
-    const rimMat = new THREE.LineBasicMaterial({ color: rim })
+    const rimMat = new THREE.LineBasicMaterial({ color: rim, transparent: true, opacity: 0.65 })
     const rimLine = new THREE.LineSegments(
       new THREE.BufferGeometry().setAttribute(
         'position',
@@ -234,11 +255,11 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   }
 
   // ---- South Plaza ----
-  floorGrid(-26, 26, -380, -284)
+  floorGrid(-26, 26, -380, -284, 0x38e8ff)
   for (const [px, pz] of [
     [-22, -300], [22, -300], [-22, -372], [22, -372], [-13, -288], [13, -288],
   ] as const) {
-    scene.add(makePalm(px, pz, 1 + Math.random() * 0.5))
+    scene.add(makeStreetlamp(px, pz, 1))
   }
   // Parked cars as low cover
   addWall(10, -322, 2, 4.5, 1.7, 0x00f0ff)
@@ -270,11 +291,11 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   }
 
   // ---- North Courtyard ----
-  floorGrid(-26, 26, 284, 380)
+  floorGrid(-26, 26, 284, 380, 0x38e8ff)
   for (const [px, pz] of [
     [-22, 300], [22, 300], [-22, 372], [22, 372], [13, 378], [-13, 288],
   ] as const) {
-    scene.add(makePalm(px, pz, 1 + Math.random() * 0.5))
+    scene.add(makeStreetlamp(px, pz, 1))
   }
   addWall(-12, 350, 4.5, 2, 1.7, 0xffd319) // car cover
   addWall(0, 320, 2, 4.5, 1.7, 0x00f0ff)
@@ -437,17 +458,67 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     scene.add(padGlow)
   }
 
-  // ---- Downtown skyline blocks past the plaza (visual depth) ----
-  for (let i = 0; i < 12; i++) {
-    const h = 14 + Math.random() * 40
-    const b = edgeBox(10 + Math.random() * 10, h, 10, 0xff2975, 0.5)
-    b.position.set(-90 + Math.random() * 180, h / 2, -420 - Math.random() * 90)
+  // ---- Kinetic Boost Strips (bridge deck + Silicon Valley approach) ----
+  const boostStrips: BoostStrip[] = [
+    { x: -3.2, z: 75, hw: 1.6, hd: 6, dirX: 0, dirZ: -1 },
+    { x: 3.2, z: -75, hw: 1.6, hd: 6, dirX: 0, dirZ: 1 },
+    { x: 0, z: 210, hw: 2.0, hd: 6, dirX: 0, dirZ: -1 },
+    { x: 0, z: 400, hw: 2.2, hd: 6, dirX: 0, dirZ: 1 },
+  ]
+  for (const strip of boostStrips) {
+    const chevrons: number[] = []
+    for (let dz = -strip.hd + 1; dz <= strip.hd - 1; dz += 2.4) {
+      const tip = dz + strip.dirZ * 1.4
+      chevrons.push(
+        strip.x - strip.hw * 0.75, 0.66, strip.z + dz,
+        strip.x, 0.66, strip.z + tip,
+        strip.x, 0.66, strip.z + tip,
+        strip.x + strip.hw * 0.75, 0.66, strip.z + dz
+      )
+    }
+    const stripMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.9 })
+    scene.add(new THREE.LineSegments(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(chevrons, 3)),
+      stripMat
+    ))
+    pulse.push({ mat: stripMat, base: 0.9, speed: 4.2 })
+  }
+
+  // ---- Volatile Prism Hazard Canister Spots ----
+  const hazardSpots: HazardSpot[] = [
+    { x: -4.2, y: 1.45, z: 120, kind: 'plasma' },
+    { x: 4.2, y: 1.45, z: 45, kind: 'cryo' },
+    { x: -4.2, y: 1.45, z: -45, kind: 'plasma' },
+    { x: 4.2, y: 1.45, z: -135, kind: 'cryo' },
+    { x: -16, y: 1.45, z: -310, kind: 'plasma' },
+    { x: 14, y: 1.45, z: -340, kind: 'cryo' },
+    { x: -12, y: 1.45, z: 335, kind: 'cryo' },
+    { x: 6, y: 1.45, z: 365, kind: 'plasma' },
+    { x: -16, y: 1.45, z: 480, kind: 'plasma' },
+    { x: 16, y: 1.45, z: 540, kind: 'cryo' },
+  ]
+
+  // ---- Downtown skyline towers past the plaza (lit-window nocturnal skyscrapers) ----
+  const skyWinTex = skyscraperWindowTexture()
+  const skyTowerMat = new THREE.MeshStandardMaterial({
+    color: 0x162238,
+    map: skyWinTex,
+    emissive: 0xffffff,
+    emissiveMap: skyWinTex,
+    emissiveIntensity: 0.55,
+    roughness: 0.38,
+    metalness: 0.7,
+  })
+  for (let i = 0; i < 14; i++) {
+    const h = 24 + Math.random() * 68
+    const b = new THREE.Mesh(new THREE.BoxGeometry(12 + Math.random() * 14, h, 12 + Math.random() * 12), skyTowerMat)
+    b.position.set(-100 + Math.random() * 200, h / 2 - 4, -425 - Math.random() * 110)
     scene.add(b)
   }
-  for (let i = 0; i < 12; i++) {
-    const h = 14 + Math.random() * 40
-    const b = edgeBox(10 + Math.random() * 10, h, 10, 0x9a2be2, 0.5)
-    b.position.set(-90 + Math.random() * 180, h / 2, 720 + Math.random() * 90)
+  for (let i = 0; i < 14; i++) {
+    const h = 24 + Math.random() * 68
+    const b = new THREE.Mesh(new THREE.BoxGeometry(12 + Math.random() * 14, h, 12 + Math.random() * 12), skyTowerMat)
+    b.position.set(-100 + Math.random() * 200, h / 2 - 4, 725 + Math.random() * 110)
     scene.add(b)
   }
 
@@ -483,6 +554,8 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     walls,
     walkRects,
     pads,
+    boostStrips,
+    hazardSpots,
     update(t: number) {
       core.rotation.y = Math.PI / 4 + t * 0.35
       core.rotation.z = Math.sin(t * 0.4) * 0.2

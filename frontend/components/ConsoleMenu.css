@@ -91,7 +91,8 @@
 .console-campus strong { display: block; color: #d5eaf2; font-weight: 500; font-size: 13px; letter-spacing: .08em; }
 .console-campus figcaption > span:last-child { text-align: right; }
 .console-activities { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.console-activities article { min-width: 0; padding: 20px 24px; background: #0b111cda; border: 1px solid #ffffff12; border-radius: 16px; }
+.console-activities article { min-width: 0; padding: 20px 24px; background: #0b111cda; border: 1px solid #ffffff12; border-radius: 16px; transition: transform 240ms cubic-bezier(.16, 1, .3, 1), border-color 240ms ease, background-color 240ms ease; }
+.console-activities article:hover { transform: translateY(-3px); border-color: #a8e8ef44; background: #0e1726e6; }
 .activity-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #a2b5c8; font-size: 9px; letter-spacing: .1em; }
 .activity-top > span:last-child { color: #a8e8ef; font-size: 16px; }
 .activity-top svg { width: 22px; height: 16px; color: #a8e8ef; }
