@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import type { DroneType, PickupKind, WeaponId } from './types'
+import { buildIndustrialPulseRifle } from './models/pulseRifle'
+import { buildLoftedSurface, superellipseRing } from './models/geometry'
 
 /**
  * All visuals are raster glow sprites + pure line primitives
@@ -246,99 +248,128 @@ export const WEAPONS: Record<WeaponId, WeaponStats> = {
 
 export interface GunRig {
   rifle: THREE.Group
+  rifleBolt?: THREE.Group
   deagle: THREE.Group
   prism: THREE.Group
   sniper: THREE.Group
   flash: THREE.Sprite
 }
 
-/** Four sleek brushed-gunmetal PBR viewmodel weapons with recessed emissive energy strips. */
+/** Four Route B curved industrial PBR viewmodel weapons attached to the camera. */
 export function buildGun(camera: THREE.PerspectiveCamera): GunRig {
-  const gunMetal = (color: number, metalness = 0.78, roughness = 0.3) =>
+  const gunMetal = (color: number, metalness = 0.8, roughness = 0.28) =>
     new THREE.MeshStandardMaterial({ color, metalness, roughness })
-  const stripMat = (color: number) =>
-    new THREE.MeshBasicMaterial({ color })
-  const part = (w: number, h: number, d: number, mat: THREE.Material) =>
-    new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
+  const glowMat = (color: number) =>
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.4, metalness: 0.2, roughness: 0.18 })
 
-  const rifle = new THREE.Group()
-  const body = part(0.13, 0.16, 0.68, gunMetal(0x182336))
-  const shroud = part(0.145, 0.06, 0.42, gunMetal(0x0f1624, 0.85, 0.25))
-  shroud.position.set(0, 0.06, -0.1)
-  const barrel = part(0.055, 0.055, 0.52, gunMetal(0x23324a, 0.88, 0.22))
-  barrel.position.set(0, 0.03, -0.54)
-  const rail = part(0.025, 0.014, 0.46, stripMat(0x38e8ff))
-  rail.position.set(0, 0.095, -0.14)
-  const grip = part(0.1, 0.24, 0.14, gunMetal(0x101724, 0.4, 0.65))
-  grip.position.set(0, -0.18, 0.2)
-  grip.rotation.x = 0.28
-  rifle.add(body, shroud, barrel, rail, grip)
-  rifle.position.set(0.48, -0.38, -0.92)
+  // 1. Industrial Route B Pulse Rifle MK-IV (20k-35k tris)
+  const rifleRig = buildIndustrialPulseRifle()
+  const rifle = rifleRig.group
+  rifle.position.set(0.36, -0.31, -0.68)
   rifle.rotation.y = 0.04
   camera.add(rifle)
 
+  // 2. Sculpted Curved Desert Eagle (lofted slide + curved grip, no flat boxes)
   const deagle = new THREE.Group()
-  const slideBox = part(0.13, 0.16, 0.44, gunMetal(0x2a3344, 0.88, 0.2))
-  const deagleBarrel = part(0.09, 0.09, 0.24, gunMetal(0x141b29, 0.85, 0.28))
-  deagleBarrel.position.set(0, 0.02, -0.30)
-  const deagleTrim = part(0.02, 0.016, 0.36, stripMat(0xffc861))
-  deagleTrim.position.set(0, 0.086, -0.02)
-  const deagleGrip = part(0.11, 0.26, 0.17, gunMetal(0x121824, 0.45, 0.6))
-  deagleGrip.position.set(0, -0.2, 0.12)
-  deagleGrip.rotation.x = 0.24
-  deagle.add(slideBox, deagleBarrel, deagleTrim, deagleGrip)
-  deagle.position.set(0.48, -0.38, -0.92)
+  const deagleSlide = new THREE.Mesh(
+    buildLoftedSurface([
+      { z: -0.34, points: superellipseRing(0.044, 0.056, 0.02, 28, 3.4, 0, 0.2) },
+      { z: -0.18, points: superellipseRing(0.052, 0.066, 0.022, 28, 3.6, 0, 0.18) },
+      { z:  0.16, points: superellipseRing(0.054, 0.068, 0.020, 28, 3.4, 0, 0.16) },
+      { z:  0.24, points: superellipseRing(0.048, 0.060, 0.015, 28, 3.0, 0, 0.18) },
+    ]),
+    gunMetal(0x8894a6, 0.88, 0.22)
+  )
+  const deagleBarrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.024, 0.18, 24).rotateX(Math.PI / 2),
+    gunMetal(0x1f2736, 0.88, 0.26)
+  )
+  deagleBarrel.position.set(0, 0.025, -0.40)
+  const deagleTrim = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.005, 0.005, 0.42, 14).rotateX(Math.PI / 2),
+    glowMat(0xffc861)
+  )
+  deagleTrim.position.set(0, 0.088, -0.06)
+  const deagleGripCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.03, 0.10),
+    new THREE.Vector3(0, -0.14, 0.13),
+    new THREE.Vector3(0, -0.24, 0.165),
+  ])
+  const deagleGrip = new THREE.Mesh(new THREE.TubeGeometry(deagleGripCurve, 16, 0.032, 18, false), gunMetal(0x141924, 0.4, 0.62))
+  deagle.add(deagleSlide, deagleBarrel, deagleTrim, deagleGrip)
+  deagle.position.set(0.42, -0.34, -0.82)
   deagle.rotation.y = 0.04
   deagle.visible = false
   camera.add(deagle)
 
+  // 3. Sculpted Prism Scattergun (twin curved optical rails + smooth glass core sphere)
   const prism = new THREE.Group()
-  const prismChassis = part(0.18, 0.17, 0.56, gunMetal(0x152034, 0.82, 0.26))
-  const prismLeftRail = part(0.045, 0.075, 0.5, gunMetal(0x1e2c44, 0.88, 0.22))
-  prismLeftRail.position.set(-0.075, 0.03, -0.42)
-  const prismRightRail = part(0.045, 0.075, 0.5, gunMetal(0x1e2c44, 0.88, 0.22))
-  prismRightRail.position.set(0.075, 0.03, -0.42)
-  const prismLeftGlow = part(0.014, 0.02, 0.46, stripMat(0xff4d88))
-  prismLeftGlow.position.set(-0.075, 0.072, -0.42)
-  const prismRightGlow = part(0.014, 0.02, 0.46, stripMat(0x38e8ff))
-  prismRightGlow.position.set(0.075, 0.072, -0.42)
-  const prismCore = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.055, 0),
-    new THREE.MeshBasicMaterial({ color: 0x56ffd8 })
+  const prismBody = new THREE.Mesh(
+    buildLoftedSurface([
+      { z: -0.46, points: superellipseRing(0.058, 0.056, 0.01, 32, 3.0, 0, 0.15) },
+      { z: -0.18, points: superellipseRing(0.078, 0.070, 0.015, 32, 3.2, 0, 0.12) },
+      { z:  0.22, points: superellipseRing(0.068, 0.064, 0.010, 32, 3.0, 0, 0.14) },
+    ]),
+    gunMetal(0x7a889b, 0.82, 0.25)
   )
-  prismCore.position.set(0, 0.085, -0.28)
-  const prismGrip = part(0.11, 0.24, 0.15, gunMetal(0x101724, 0.45, 0.6))
-  prismGrip.position.set(0, -0.19, 0.16)
-  prismGrip.rotation.x = 0.26
-  prism.add(prismChassis, prismLeftRail, prismRightRail, prismLeftGlow, prismRightGlow, prismCore, prismGrip)
-  prism.position.set(0.48, -0.38, -0.92)
+  for (const side of [-1, 1] as const) {
+    const rail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.020, 0.54, 20).rotateX(Math.PI / 2),
+      gunMetal(0x1f293c, 0.88, 0.22)
+    )
+    rail.position.set(side * 0.074, 0.028, -0.38)
+    const strip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, 0.48, 12).rotateX(Math.PI / 2),
+      glowMat(side < 0 ? 0xff4d88 : 0x38e8ff)
+    )
+    strip.position.set(side * 0.074, 0.052, -0.38)
+    prism.add(rail, strip)
+  }
+  const prismCore = new THREE.Mesh(new THREE.SphereGeometry(0.042, 24, 18), glowMat(0x4dffdf))
+  prismCore.position.set(0, 0.072, -0.24)
+  prism.add(prismBody, prismCore)
+  prism.position.set(0.42, -0.34, -0.82)
   prism.rotation.y = 0.04
   prism.visible = false
   camera.add(prism)
 
+  // 4. Sculpted Gauss Sniper (long tapered carbon-titanium rail + cylindrical scope)
   const sniper = new THREE.Group()
-  const sniperBody = part(0.11, 0.14, 0.84, gunMetal(0x151d2e, 0.82, 0.28))
-  const sniperBarrel = part(0.048, 0.048, 1.02, gunMetal(0x26354d, 0.9, 0.2))
-  sniperBarrel.position.set(0, 0.03, -0.88)
-  const sniperRail = part(0.016, 0.014, 0.88, stripMat(0xff4d79))
-  sniperRail.position.set(0, 0.06, -0.82)
-  const sniperScope = part(0.065, 0.075, 0.34, gunMetal(0x0f1624, 0.85, 0.22))
-  sniperScope.position.set(0, 0.13, -0.14)
-  const sniperGrip = part(0.09, 0.24, 0.14, gunMetal(0x101724, 0.45, 0.6))
-  sniperGrip.position.set(0, -0.19, 0.24)
-  sniperGrip.rotation.x = 0.24
-  sniper.add(sniperBody, sniperBarrel, sniperRail, sniperScope, sniperGrip)
-  sniper.position.set(0.48, -0.38, -0.92)
+  const sniperBody = new THREE.Mesh(
+    buildLoftedSurface([
+      { z: -0.58, points: superellipseRing(0.036, 0.048, 0.01, 28, 3.2, 0, 0.18) },
+      { z:  0.05, points: superellipseRing(0.056, 0.066, 0.015, 28, 3.4, 0, 0.14) },
+      { z:  0.38, points: superellipseRing(0.046, 0.058, 0.005, 28, 3.0, 0, 0.16) },
+    ]),
+    gunMetal(0x283244, 0.84, 0.26)
+  )
+  const sniperBarrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.026, 0.96, 28).rotateX(Math.PI / 2),
+    gunMetal(0x7c8a9e, 0.9, 0.2)
+  )
+  sniperBarrel.position.set(0, 0.025, -0.84)
+  const sniperScope = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.028, 0.022, 0.36, 24).rotateX(Math.PI / 2),
+    gunMetal(0x161d2b, 0.88, 0.22)
+  )
+  sniperScope.position.set(0, 0.115, -0.10)
+  const sniperRail = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0045, 0.0045, 0.84, 12).rotateX(Math.PI / 2),
+    glowMat(0xff4d79)
+  )
+  sniperRail.position.set(0, 0.055, -0.78)
+  sniper.add(sniperBody, sniperBarrel, sniperScope, sniperRail)
+  sniper.position.set(0.42, -0.34, -0.82)
   sniper.rotation.y = 0.04
   sniper.visible = false
   camera.add(sniper)
 
-  const flash = makeGlowSprite(0xbef6ff, 0.65, 0.9)
-  flash.position.set(0.48, -0.26, -1.45)
+  const flash = makeGlowSprite(0x9ef6ff, 0.58, 0.9)
+  flash.position.set(0.36, -0.25, -1.42)
   flash.visible = false
   camera.add(flash)
 
-  return { rifle, deagle, prism, sniper, flash }
+  return { rifle, rifleBolt: rifleRig.boltGroup, deagle, prism, sniper, flash }
 }
 
 export interface DroneStats {
@@ -395,102 +426,78 @@ export interface DroneParts {
   hull?: THREE.Group
 }
 
-/** 3D obsidian-and-neon drone with a distinct polyhedral silhouette per archetype. */
+/** Smooth optical glass-lens & gyroscopic energy drone (zero low-poly faceted blocks). */
 export function makeDrone(type: DroneType): DroneParts {
   const st = DRONE_STATS[type]
   const group = new THREE.Group()
 
-  let seg = 40
-  if (type === 'brawler') seg = 3
-  else if (type === 'swarm') seg = 24
-  else if (type === 'marksman') seg = 32
-  else if (type === 'aegis') seg = 6
-
-  const outer = circleLine(st.radius, st.color, seg, 0.42)
-  const inner = circleLine(st.radius * 0.55, st.color, type === 'brawler' ? 3 : type === 'aegis' ? 6 : 20, 0.28)
-  const core = makeGlowSprite(st.coreColor, st.radius * 1.9, 0.88)
+  const outer = circleLine(st.radius, st.color, 48, 0.34)
+  const inner = circleLine(st.radius * 0.58, st.color, 36, 0.22)
+  const core = makeGlowSprite(st.coreColor, st.radius * 2.0, 0.92)
   let frame: THREE.LineLoop | null = null
 
-  // Sculpted dark-titanium PBR polyhedral drone chassis
+  // Smooth obsidian optical-lens orb with Fresnel rim shader (matches standby prism DNA)
   const hull = new THREE.Group()
-  let hullGeo: THREE.BufferGeometry
-  if (type === 'brawler' || type === 'marksman') {
-    hullGeo = new THREE.TetrahedronGeometry(st.radius * 0.68, 0)
-  } else if (type === 'enforcer' || type === 'boss') {
-    hullGeo = new THREE.DodecahedronGeometry(st.radius * 0.68, 0)
-  } else if (type === 'aegis') {
-    hullGeo = new THREE.OctahedronGeometry(st.radius * 0.7, 0)
-  } else {
-    hullGeo = new THREE.OctahedronGeometry(st.radius * 0.62, 0)
+  const orbGeo = new THREE.SphereGeometry(st.radius * 0.56, 28, 20)
+  const orbMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(st.color) },
+      uCore: { value: new THREE.Color(st.coreColor) },
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform vec3 uCore;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        float ndotv = clamp(dot(normalize(vNormal), normalize(vView)), 0.0, 1.0);
+        float fresnel = pow(1.0 - ndotv, 2.6);
+        vec3 glass = mix(vec3(0.03, 0.06, 0.12), uColor, fresnel * 0.92);
+        glass += uCore * pow(ndotv, 5.0) * 0.55;
+        gl_FragColor = vec4(glass, 1.0);
+      }
+    `,
+  })
+  hull.add(new THREE.Mesh(orbGeo, orbMat))
+
+  // Machined curved gyroscopic titanium ring(s) around the optical core
+  const ringMat = new THREE.MeshStandardMaterial({
+    color: 0x202a3c,
+    metalness: 0.88,
+    roughness: 0.22,
+    emissive: new THREE.Color(st.color),
+    emissiveIntensity: 0.35,
+  })
+  const primaryGyro = new THREE.Mesh(
+    new THREE.TorusGeometry(st.radius * 0.82, st.radius * 0.065, 14, 44),
+    ringMat
+  )
+  hull.add(primaryGyro)
+
+  if (type === 'enforcer' || type === 'boss' || type === 'aegis') {
+    const crossGyro = new THREE.Mesh(
+      new THREE.TorusGeometry(st.radius * 0.96, st.radius * 0.05, 12, 44),
+      ringMat
+    )
+    crossGyro.rotation.x = Math.PI / 2.2
+    hull.add(crossGyro)
   }
-  const hullMesh = new THREE.Mesh(
-    hullGeo,
-    new THREE.MeshStandardMaterial({
-      color: 0x162238,
-      metalness: 0.76,
-      roughness: 0.28,
-      emissive: new THREE.Color(st.color),
-      emissiveIntensity: 0.24,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-    })
-  )
-  const hullEdges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(hullGeo),
-    new THREE.LineBasicMaterial({ color: st.color, transparent: true, opacity: 0.55 })
-  )
-  hull.add(hullMesh, hullEdges)
+
   group.add(hull)
 
   if (type === 'enforcer' || type === 'boss') {
-    const r = st.radius * 1.35
-    frame = new THREE.LineLoop(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(r, 0, 0),
-        new THREE.Vector3(0, r, 0),
-        new THREE.Vector3(-r, 0, 0),
-        new THREE.Vector3(0, -r, 0),
-      ]),
-      new THREE.LineBasicMaterial({ color: 0xff2975, transparent: true })
-    )
+    frame = circleLine(st.radius * 1.28, 0xff4d88, 48, 0.45)
     group.add(frame)
-    if (type === 'boss') {
-      const crownRing = circleLine(st.radius * 1.15, 0xffd319, 12, 0.85)
-      crownRing.rotation.x = Math.PI / 2.6
-      hull.add(crownRing)
-    }
-  }
-  if (type === 'marksman') {
-    const spokes = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(st.radius * 1.3, 0, 0),
-        new THREE.Vector3(st.radius * 0.7, 0, 0),
-        new THREE.Vector3(-st.radius * 1.3, 0, 0),
-        new THREE.Vector3(-st.radius * 0.7, 0, 0),
-        new THREE.Vector3(0, st.radius * 1.3, 0),
-        new THREE.Vector3(0, st.radius * 0.7, 0),
-        new THREE.Vector3(0, -st.radius * 1.3, 0),
-        new THREE.Vector3(0, -st.radius * 0.7, 0),
-      ]),
-      new THREE.LineBasicMaterial({ color: st.color })
-    )
-    group.add(spokes)
-  }
-  if (type === 'gunner') {
-    const barrelLine = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, st.radius * 0.6),
-        new THREE.Vector3(0, 0, st.radius * 1.6),
-      ]),
-      new THREE.LineBasicMaterial({ color: st.color })
-    )
-    group.add(barrelLine)
-  }
-  if (type === 'aegis') {
-    const halo = circleLine(st.radius * 1.15, 0x00f0ff, 6, 0.75)
-    halo.rotation.x = Math.PI / 2
-    hull.add(halo)
   }
 
   const proxy = ghostSphere(st.radius * 1.1)
@@ -670,29 +677,28 @@ export interface HazardParts {
   kind: HazardKind
 }
 
-/** Shootable volatile prism canister: plasma detonation or cryo freeze shockwave. */
+/** Smooth lathed industrial volatile canister (plasma or cryo). */
 export function makeHazardCanister(kind: HazardKind): HazardParts {
-  const color = kind === 'cryo' ? 0x00f0ff : 0xff4d2e
-  const coreTint = kind === 'cryo' ? 0x051828 : 0x20080a
+  const color = kind === 'cryo' ? 0x29e3ff : 0xff4d6d
   const group = new THREE.Group()
-  const cylGeo = new THREE.CylinderGeometry(0.55, 0.55, 1.6, 6)
-  const core = new THREE.Mesh(
-    cylGeo,
-    new THREE.MeshBasicMaterial({
-      color: coreTint,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-    })
+  const profile = [
+    new THREE.Vector2(0.01, -0.78),
+    new THREE.Vector2(0.46, -0.78),
+    new THREE.Vector2(0.56, -0.66),
+    new THREE.Vector2(0.56, 0.66),
+    new THREE.Vector2(0.46, 0.78),
+    new THREE.Vector2(0.01, 0.78),
+  ]
+  const body = new THREE.Mesh(
+    new THREE.LatheGeometry(profile, 32),
+    new THREE.MeshStandardMaterial({ color: 0x162033, metalness: 0.82, roughness: 0.28 })
   )
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(cylGeo),
-    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 })
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(0.58, 0.045, 14, 36).rotateX(Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.35, metalness: 0.3, roughness: 0.2 })
   )
-  const band = circleLine(0.75, color, 6, 0.7)
-  band.rotation.x = Math.PI / 2
-  const glow = makeGlowSprite(color, 2.8, 0.7)
+  const glow = makeGlowSprite(color, 2.5, 0.55)
   const proxy = ghostSphere(1.15)
-  group.add(core, edges, band, glow, proxy)
+  group.add(body, collar, glow, proxy)
   return { group, proxy, glow, kind }
 }

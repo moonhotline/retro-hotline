@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { createSynthwaveGradePass } from './postprocess'
 import { buildEnvironment } from './environment'
 import { resolveWalls } from './map'
 import {
@@ -86,6 +88,7 @@ export class GameEngine implements CombatHost {
   private renderer: THREE.WebGLRenderer
   private composer: EffectComposer
   private bloomPass: UnrealBloomPass
+  private gradePass: ShaderPass
   scene = new THREE.Scene()
   camera: THREE.PerspectiveCamera
   private clock = new THREE.Clock()
@@ -232,8 +235,10 @@ export class GameEngine implements CombatHost {
 
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.26, 0.48, 0.58)
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.30, 0.45, 0.62)
     this.composer.addPass(this.bloomPass)
+    this.gradePass = createSynthwaveGradePass()
+    this.composer.addPass(this.gradePass)
     this.composer.addPass(new OutputPass())
 
     this.env = buildEnvironment(this.scene)
@@ -677,6 +682,9 @@ export class GameEngine implements CombatHost {
     })
     this.spawnPickup(position, -1, 'heal', 35)
     this.spawnPickup(position, -1, 'overcharge')
+    if (this.hackManager.bonusOverchargeSeconds > 0) {
+      this.overchargeT = Math.max(this.overchargeT, OVERCHARGE_TIME + this.hackManager.bonusOverchargeSeconds)
+    }
     this.score += 350
     this.pushPopup('+350 GLORY KILL', 'crit', position)
     this.setBanner(GLORY_KILL_BANNER)
@@ -896,19 +904,7 @@ export class GameEngine implements CombatHost {
       if (this.director.hackSniperShot()) this.emit(true)
       else this.tryPunch()
     }
-    if (e.code === 'KeyV' && !e.repeat) {
-      if (this.abilities.tryPulseParry()) this.sfx.gloryPing()
-    }
-    if (e.code === 'KeyG' && !e.repeat) {
-      if (this.abilities.tryKineticSlam()) this.sfx.whoosh()
-    }
-    if (e.code === 'KeyC' || e.code === 'ControlLeft') {
-      if (!this.grounded && !e.repeat) {
-        if (this.abilities.tryKineticSlam()) this.sfx.whoosh()
-      } else {
-        this.trySlide()
-      }
-    }
+    // V, C, ControlLeft and G are permanently disabled per AGENTS.md.
     if (e.code === 'KeyR') this.tryReload()
   }
 
@@ -948,7 +944,7 @@ export class GameEngine implements CombatHost {
     if (this.reloading || this.ammo[this.weapon] === WEAPONS[this.weapon].mag) return
     this.reloading = true
     this.magDropped = false
-    this.reloadT = WEAPONS[this.weapon].reloadTime
+    this.reloadT = WEAPONS[this.weapon].reloadTime * this.hackManager.reloadTimeMultiplier
     this.sfx.reload()
   }
 
@@ -1571,10 +1567,21 @@ export class GameEngine implements CombatHost {
     const worldDt = dt * this.chronoTimeScale
 
     // ---- movement ----
+    const wasPhaseDashing = this.abilities.isDashing
     const dashing = this.gloryKills.isDashing || this.abilities.isDashing
     this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
     this.gloryKills.update(elapsed, t)
     this.abilities.update(dtRaw, t)
+    if (wasPhaseDashing && !this.abilities.isDashing && this.hackManager.hasDashNova) {
+      const origin = this.pos.clone()
+      this.shockwave(origin, 0x29e3ff, 11)
+      this.addShake(0.45)
+      for (const e of [...this.director.enemies]) {
+        if (e.parts.group.position.distanceTo(origin) > 11) continue
+        const killed = this.director.damageEnemy(e, 6, true)
+        if (!killed) this.director.staggerEnemy(e)
+      }
+    }
     if (this.draftHacks.length > 0) return
     const sprintKey = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
     if (!dashing && this.slideT > 0) {
@@ -1789,18 +1796,23 @@ export class GameEngine implements CombatHost {
           ? this.gunRig.prism
           : this.gunRig.sniper
     this.gunKick = Math.max(0, this.gunKick - dt * 4.5)
-    let gy2 = -0.42
+    const isRifle = this.weapon === 'rifle'
+    const baseX = isRifle ? 0.36 : 0.42
+    const baseY = isRifle ? -0.31 : -0.34
+    const baseZ = isRifle ? -0.68 : -0.82
+    let gy2 = baseY
     let rotX = 0
     let rotZ = 0
+    const reloadDuration = Math.max(0.1, w.reloadTime * this.hackManager.reloadTimeMultiplier)
     if (this.reloading) {
       this.reloadT -= dt
-      const k = 1 - Math.max(this.reloadT, 0) / w.reloadTime
-      gy2 -= 0.3 * Math.sin(k * Math.PI)
-      rotX = -0.7 * Math.sin(k * Math.PI)
+      const k = 1 - Math.max(this.reloadT, 0) / reloadDuration
+      gy2 -= 0.24 * Math.sin(k * Math.PI)
+      rotX = -0.58 * Math.sin(k * Math.PI)
       rotZ = k * Math.PI * 2
       if (!this.magDropped && k > 0.4) {
         this.magDropped = true
-        const drop = this.camera.localToWorld(new THREE.Vector3(0.52, -0.8, -1.0))
+        const drop = this.camera.localToWorld(new THREE.Vector3(baseX, -0.7, -0.9))
         this.particles.burst(drop, CASING_COLOR, 7, 3, 0.6)
       }
       if (this.reloadT <= 0) {
@@ -1810,10 +1822,13 @@ export class GameEngine implements CombatHost {
     }
     if (this.swapT > 0) {
       this.swapT -= dtRaw
-      gy2 -= 0.45 * Math.max(this.swapT / 0.25, 0)
+      gy2 -= 0.4 * Math.max(this.swapT / 0.25, 0)
     }
-    gun.position.set(0.52, gy2, -0.95 + this.gunKick)
-    gun.rotation.set(rotX, 0.05, rotZ)
+    gun.position.set(baseX, gy2, baseZ + this.gunKick * 0.65)
+    gun.rotation.set(rotX + this.gunKick * 0.28, 0.04, rotZ)
+    if (this.gunRig.rifleBolt) {
+      this.gunRig.rifleBolt.position.z = isRifle ? this.gunKick * 0.9 : 0
+    }
 
     if (this.muzzleTimer > 0) {
       this.muzzleTimer -= dt
@@ -1989,6 +2004,9 @@ export class GameEngine implements CombatHost {
       this.update(dt, rawDelta)
     } else if (this.status === 'menu') {
       this.updateCinematic(t)
+    }
+    if (this.gradePass?.uniforms?.['uTime']) {
+      this.gradePass.uniforms['uTime'].value = t
     }
     this.composer.render(dt)
   }

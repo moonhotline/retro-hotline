@@ -55,7 +55,17 @@ Whenever you complete a feature, bug fix, redesign, or refactor:
 
 ---
 
-## 4. Testing & Playtest Protocol
+## 4. Permanent Controls & Asset Quality Rules (STRICT)
 
-- All core combat systems (glory kills, phase dash, pulse parry, kinetic slam, hitstop, neon hacks) must have matching unit tests in `frontend/game/*.test.ts`.
+- **PERMANENTLY BANNED KEYS & MECHANICS (NEVER RE-ADD)**:
+  - The **`V`**, **`C`**, **`ControlLeft`**, and **`G`** keybindings — and all **Pulse Parry**, **Slide**, and **Kinetic Slam** gameplay logic, HUD pills, and controls manual entries — are **PERMANENTLY DELETED** and must **NEVER** be added back in any future iteration.
+  - Core combat controls stay streamlined: `W A S D` (move/drive), `SPACE` (jump / wall climb / drift), `SHIFT` (phase dash / nitrous), `LMB` (fire), `RMB` (zoom / melee), `E` (glory kill / interact / enter-exit vehicle), `F` (sniper hack / melee), `Q / 1-4` (swap weapon), `R` (reload).
+- **Route B Procedural Industrial Craft**:
+  - Avoid raw low-poly geometric primitives (`BoxGeometry`, `OctahedronGeometry`, `TetrahedronGeometry`, `DodecahedronGeometry`) for visible foreground hero assets and enemies; use continuous multi-section lofted/curved/beveled procedural Three.js geometry and GLSL optical shaders.
+
+---
+
+## 5. Testing & Playtest Protocol
+
+- All core combat systems (glory kills, phase dash, hitstop, sniper hack, neon hacks, vehicle driving) must have matching unit tests in `frontend/game/*.test.ts`.
 - Mocks in tests must match the public API of `SynthMusic` and `SoundEffects` (`setVolume`, `setMuted`, `setComboRank`, `triggerFilterDrop`).

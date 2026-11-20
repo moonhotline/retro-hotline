@@ -4,6 +4,7 @@ import type { PlayerProfile } from '../game/combat/storage'
 import { MUSIC_TRACKS } from '../game/music'
 import type { HudState } from '../game/types'
 import { MistAtmosphere } from './MistAtmosphere'
+import { NightGarage } from './NightGarage'
 import './ConsoleMenu.css'
 
 type ConsoleAction = 'confirm' | 'back' | 'controls' | 'audio' | 'track'
@@ -76,10 +77,10 @@ export function TrackBadge({ name = 'NEON COMBAT SUITE', bpm = 125 }: { name?: s
 }
 
 const CONTROL_GROUPS = [
-  { title: 'MOVEMENT', rows: [['Move', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Hold to sprint', 'SHIFT'], ['Slide / Air Slam', 'C / CTRL']] },
-  { title: 'COMBAT', rows: [['Fire · rifle / scatter / rail', 'LMB'], ['Hack sniper / punch', 'F'], ['Punch / Sniper zoom', 'RMB'], ['Glory shatter · staggered', 'E'], ['Reload / swap weapon', 'R / Q / 1-4']] },
-  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Pulse parry · deflect fire', 'V'], ['Kinetic slam · airborne', 'C / G']] },
-  { title: 'AUDIO & SYSTEM', rows: [['Cycle music track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Hub controls / standby', 'C / O']] },
+  { title: 'MOVEMENT', rows: [['Move / Drive', 'W A S D'], ['Jump / Wall climb', 'SPACE'], ['Sprint / Phase dash', 'SHIFT']] },
+  { title: 'COMBAT', rows: [['Fire weapon', 'LMB'], ['Hack sniper / punch', 'F'], ['Punch / Sniper zoom', 'RMB'], ['Glory kill / Interact', 'E'], ['Reload / swap weapon', 'R / Q / 1-4']] },
+  { title: 'CYBER-ABILITIES', note: 'KEYBOARD ONLY', rows: [['Phase dash · tap', 'SHIFT'], ['Wall run / climb · air near wall', 'SPACE'], ['Sniper shot hijack', 'F']] },
+  { title: 'AUDIO & SYSTEM', rows: [['Cycle music track', 'N'], ['Toggle audio', 'M'], ['Pause / release cursor', 'ESC'], ['Controls / standby', 'I / O']] },
 ]
 
 function ControlsGrid() {
@@ -93,43 +94,29 @@ function ControlsGrid() {
           </section>
         ))}
       </div>
-      <div className="console-control-note"><kbd>SHIFT</kbd> DASH <span>/</span> <kbd>SPACE</kbd> WALL CLIMB <span>/</span> <kbd>C</kbd> SLIDE <p>Mouse buttons shoot and punch. Press Space near walls to leap and climb.</p></div>
-      <p className="console-tactic">Break a target into stagger, then press E to shatter it for health and overdrive. Take the campus launch pad to the Quantum Vault.</p>
+      <div className="console-control-note"><kbd>SHIFT</kbd> PHASE DASH <span>/</span> <kbd>SPACE</kbd> WALL CLIMB <span>/</span> <kbd>F</kbd> HIJACK <p>Mouse buttons shoot and zoom/punch. Press E to shatter staggered targets or enter vehicles.</p></div>
+      <p className="console-tactic">Break targets into stagger, then press E to shatter them for health and overdrive across all five connected landmarks.</p>
     </>
   )
 }
 
-function CampusPreview() {
+const WORLD_SECTORS = [
+  ['01', 'GOLDEN GATE'],
+  ['02', 'TIMES SQUARE'],
+  ['03', 'VEGAS SPHERE'],
+  ['04', 'GOOGLEPLEX'],
+  ['05', 'APPLE PARK'],
+] as const
+
+function PrismSectorLegend() {
   return (
-    <figure className="console-campus" aria-label="Wireframe preview of the Silicon Valley Quantum Campus">
-      <div className="campus-heading"><span>EXPLORE THE NEXT SECTOR</span><span>04 / SV</span></div>
-      <svg viewBox="0 0 600 440" fill="none" aria-hidden="true">
-        <defs><linearGradient id="campus-floor" x1="300" y1="160" x2="300" y2="440" gradientUnits="userSpaceOnUse"><stop stopColor="#76dded" stopOpacity=".28" /><stop offset="1" stopColor="#76dded" stopOpacity="0" /></linearGradient></defs>
-        <g stroke="url(#campus-floor)" strokeWidth=".8">
-          {Array.from({ length: 12 }, (_, i) => <path key={i} d={`M${i * 40 - 140} 270l360 180m${i * 40 + 20} 0l360-180`} />)}
-        </g>
-        <path d="M115 340l200-100 180 90-200 100Z" fill="#091823" stroke="#5d9eaf" strokeOpacity=".5" />
-        <g stroke="#69bed0" strokeWidth="1.2" fill="#09131e">
-          <path d="M192 288V136l47-24 47 24v152l-47 24Z" /><path d="M192 136l47 24 47-24m-47 24v152" />
-          <path d="M350 269V74l43-22 43 22v195l-43 22Z" /><path d="M350 74l43 22 43-22m-43 22v195" />
-          <path d="M443 308V178l36-18 36 18v130l-36 18Z" /><path d="M443 178l36 18 36-18m-36 18v130" />
-          <path d="M103 306V216l29-15 29 15v90l-29 15Z" /><path d="M103 216l29 15 29-15m-29 15v90" />
-        </g>
-        <g stroke="#78dfe9" strokeOpacity=".5">
-          {[0, 1, 2, 3, 4, 5].map((i) => <path key={i} d={`M350 ${94 + i * 26}l43 22 43-22M192 ${156 + i * 22}l47 24 47-24`} />)}
-        </g>
-        <path d="M220 315v-24l90-45 112 56v24l-90 45Z" fill="#0c2330" stroke="#a5f4fa" strokeWidth="1.5" />
-        <path d="M220 291l112 56 90-45m-90 45v24M243 327v45m154-49v35" stroke="#a5f4fa" strokeOpacity=".65" />
-        <g className="campus-crystal">
-          <path d="M320 204l25 35-25 35-25-35Z" fill="#8fffd9" fillOpacity=".14" stroke="#a0ffdd" strokeWidth="1.5" />
-          <path d="M295 239h50m-25-35v70" stroke="#a0ffdd" strokeOpacity=".65" />
-          <circle cx="320" cy="239" r="49" stroke="#a0ffdd" strokeOpacity=".26" />
-        </g>
-        <path d="M35 380l96-48 79 39 70-35" stroke="#8be5ee" strokeDasharray="4 7" />
-        <circle cx="131" cy="332" r="4" fill="#8be5ee" /><circle cx="280" cy="336" r="4" fill="#d5fffd" />
-      </svg>
-      <figcaption><span>SAND HILL<br /><strong>QUANTUM VAULT</strong></span><span>ALTITUDE<strong>9.5 M</strong></span></figcaption>
-    </figure>
+    <div className="console-prism-stage" aria-label="Connected world sectors">
+      <div className="prism-route-strip">
+        {WORLD_SECTORS.map(([num, name]) => (
+          <span key={num}><em>{num}</em> {name}</span>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -143,8 +130,10 @@ interface ConsoleMenuProps {
 }
 
 export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }: ConsoleMenuProps) {
-  const [standby, setStandby] = useState(true)
-  const [section, setSection] = useState<'games' | 'media'>('games')
+  const [standby, setStandby] = useState(() => !(typeof window !== 'undefined' && window.location.search.includes('garage=1')))
+  const [section, setSection] = useState<'games' | 'garage' | 'media'>(() =>
+    typeof window !== 'undefined' && window.location.search.includes('garage=1') ? 'garage' : 'games'
+  )
   const [controls, setControls] = useState(false)
   const [prismBoost, setPrismBoost] = useState(false)
   const [clock, setClock] = useState(new Date())
@@ -156,7 +145,7 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
   const wake = useCallback(() => { onWake(); setStandby(false) }, [onWake])
   const back = useCallback(() => {
     if (controls) setControls(false)
-    else if (section === 'media') setSection('games')
+    else if (section === 'media' || section === 'garage') setSection('games')
     else setStandby(true)
   }, [controls, section])
   const onController = useCallback((action: ConsoleAction) => {
@@ -228,24 +217,9 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
           .from('.console-records > div', { y: 14, opacity: 0, stagger: 0.06, duration: 0.55 }, 0.38)
           .from('.console-actions button', { y: 14, opacity: 0, stagger: 0.08, duration: 0.55 }, 0.48)
           .from('.console-utilities', { opacity: 0, duration: 0.5 }, 0.58)
-          .from('.console-campus', { x: 26, opacity: 0, duration: 0.85 }, 0.24)
+          .from('.prism-route-strip span', { y: 12, opacity: 0, stagger: 0.055, duration: 0.5 }, 0.34)
           .from('.console-activities article', { y: 22, opacity: 0, stagger: 0.09, duration: 0.65, ease: 'power3.out' }, 0.5)
-
-        gsap.to('.console-campus > svg', {
-          y: -7,
-          duration: 3.2,
-          ease: 'sine.inOut',
-          repeat: -1,
-          yoyo: true,
-        })
-        gsap.to('.campus-crystal', {
-          opacity: 0.65,
-          duration: 1.7,
-          ease: 'sine.inOut',
-          repeat: -1,
-          yoyo: true,
-        })
-      } else {
+      } else if (section === 'media') {
         gsap.from('.console-media > *', { y: 18, opacity: 0, stagger: 0.07, duration: 0.6, ease: 'expo.out' })
       }
     }, shell)
@@ -255,7 +229,7 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return
-      if (!['Enter', 'Space', 'KeyX', 'KeyC', 'KeyM', 'KeyN', 'Escape', 'KeyO'].includes(e.code)) return
+      if (!['Enter', 'Space', 'KeyX', 'KeyI', 'KeyM', 'KeyN', 'Escape', 'KeyO'].includes(e.code)) return
       e.stopImmediatePropagation()
       if (e.repeat) { e.preventDefault(); return }
       if (standby) {
@@ -267,14 +241,14 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
       if (['Enter', 'Space'].includes(e.code) && e.target instanceof Element && e.target.closest('button')) return
       e.preventDefault()
       if (e.code === 'Escape' || e.code === 'KeyO') back()
-      else if (e.code === 'KeyC') setControls((value) => !value)
+      else if (e.code === 'KeyI') setControls((value) => !value)
       else if (e.code === 'KeyM') onAudio()
       else if (e.code === 'KeyN') onTrack()
-      else if (!controls && ['KeyX', 'Enter'].includes(e.code)) onStart()
+      else if (!controls && section === 'games' && ['KeyX', 'Enter'].includes(e.code)) onStart()
     }
     window.addEventListener('keydown', handleKey, true)
     return () => window.removeEventListener('keydown', handleKey, true)
-  }, [standby, controls, wake, back, onStart, onAudio, onTrack])
+  }, [standby, controls, section, wake, back, onStart, onAudio, onTrack])
 
   return (
     <div ref={shellRef} className="ps5-standby-screen console-shell" data-ps5-phase={standby ? 'standby' : 'dashboard'}>
@@ -289,7 +263,9 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
       </svg>
       </>}
       </div>
-      {standby ? (
+      {!standby && section === 'garage' ? (
+        <NightGarage onBack={() => setSection('games')} />
+      ) : standby ? (
         <main className="console-standby" aria-label="Console standby">
           <div className="standby-status"><ControllerStatus state={controller} /></div>
           <div className="standby-center">
@@ -312,7 +288,11 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
       ) : (
         <div className="console-dashboard">
           <header className="console-header">
-            <nav aria-label="Console sections"><button type="button" aria-current={section === 'games' ? 'page' : undefined} onClick={() => setSection('games')}>GAMES</button><button type="button" aria-current={section === 'media' ? 'page' : undefined} onClick={() => setSection('media')}>MEDIA</button></nav>
+            <nav aria-label="Console sections">
+              <button type="button" aria-current={section === 'games' ? 'page' : undefined} onClick={() => setSection('games')}>GAMES</button>
+              <button type="button" onClick={() => setSection('garage')}>NIGHT GARAGE</button>
+              <button type="button" aria-current={section === 'media' ? 'page' : undefined} onClick={() => setSection('media')}>MEDIA</button>
+            </nav>
             <div className="console-header-status"><ControllerStatus state={controller} /><time dateTime={clock.toISOString()}>{clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</time><span className="console-profile"><span className="profile-avatar" aria-hidden="true">A</span>ALEXANDER<i className={`status-dot ${online ? 'is-online' : ''}`} role="img" aria-label={online ? 'Online' : 'Offline'} /></span></div>
           </header>
           <main className="console-main">
@@ -325,15 +305,15 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
                     <h1 id="console-game-title" className="console-title font-orbitron">RETRO<br />HOTLINE<span className="title-period">.</span></h1>
                     <p className="console-subtitle">BAY AREA & SILICON VALLEY CYBER-SECTOR <span>· 1989 / 2089</span></p>
                     <dl className="console-records" aria-label="Personal records">{[['HIGH SCORE', profile.highScore], ['MAX WAVE', profile.maxWave], ['TOTAL KILLS', profile.totalKills], ['GLORY KILLS', profile.totalGloryKills]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{Number(value).toLocaleString()}</dd></div>)}</dl>
-                    <div className="console-actions"><button ref={launchRef} type="button" className="console-primary" aria-keyshortcuts="X Enter" onMouseEnter={() => setPrismBoost(true)} onMouseLeave={() => setPrismBoost(false)} onClick={onStart}><span aria-hidden="true">✕</span> LAUNCH PROTOCOL</button><button type="button" className="console-secondary" aria-haspopup="dialog" aria-keyshortcuts="C" onClick={() => setControls(true)}><span aria-hidden="true">◻︎</span> CONTROLS & TACTICS</button></div>
+                    <div className="console-actions"><button ref={launchRef} type="button" className="console-primary" aria-keyshortcuts="X Enter" onMouseEnter={() => setPrismBoost(true)} onMouseLeave={() => setPrismBoost(false)} onClick={onStart}><span aria-hidden="true">✕</span> LAUNCH PROTOCOL</button><button type="button" className="console-secondary" aria-haspopup="dialog" aria-keyshortcuts="I" onClick={() => setControls(true)}><span aria-hidden="true">◻︎</span> CONTROLS & TACTICS</button></div>
                     <div className="console-utilities"><button type="button" aria-keyshortcuts="O Escape" onClick={() => setStandby(true)}><span aria-hidden="true">○</span> STANDBY</button><button type="button" aria-keyshortcuts="M" aria-pressed={!hud.muted} onClick={onAudio}><span aria-hidden="true">△</span> AUDIO: {hud.muted ? 'OFF' : 'ON'}</button></div>
                   </div>
-                  <CampusPreview />
+                  <PrismSectorLegend />
                 </section>
                 <section className="console-activities" aria-label="Activities">
-                  <article><div className="activity-top"><span>EXPEDITION</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M6 13 18 1M7 1h11v11" /></svg></div><h2>BAY TO SILICON VALLEY</h2><p>Transit span to Sand Hill Quantum Vault</p><div className="activity-route" aria-hidden="true"><i /><span /><i /><span /><i /><span /><i /></div></article>
-                  <article><div className="activity-top"><span>TACTICAL CYBER-COMBAT</span><span aria-hidden="true">✕</span></div><h2>HOLD THE TRIGGER.</h2><p>Full-Auto Pulse Rifle · Glory Shatter</p><div className="activity-foot">PHASE DASH <span>/</span> WALL CLIMB <kbd>SPACE</kbd> <span>/</span> SLIDE <kbd>C</kbd></div></article>
-                  <article><div className="activity-top"><span>PROCEDURAL WEBAUDIO</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 5v6m5-9v12m5-14v16m5-13v10m5-8v6" /></svg></div><h2>THE CITY HAS A PULSE.</h2><p>5 stems · 3 switchable synth tracks</p><div className="activity-foot">ZERO EXTERNAL MP3 / WAV MUSIC</div></article>
+                  <article><div className="activity-top"><span>OPEN CORRIDOR</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M6 13 18 1M7 1h11v11" /></svg></div><h2>FIVE CONNECTED LANDMARKS</h2><p>Golden Gate to Times Sq, Sphere & Apple Park</p><div className="activity-route" aria-hidden="true"><i /><span /><i /><span /><i /><span /><i /><span /><i /></div></article>
+                  <article><div className="activity-top"><span>TACTICAL CYBER-COMBAT</span><span aria-hidden="true">✕</span></div><h2>HOLD THE TRIGGER.</h2><p>Industrial Pulse Rifle · Glory Shatter · Hijack</p><div className="activity-foot">PHASE DASH <kbd>SHIFT</kbd> <span>/</span> WALL CLIMB <kbd>SPACE</kbd> <span>/</span> HIJACK <kbd>F</kbd></div></article>
+                  <article><div className="activity-top"><span>NIGHT GARAGE</span><svg viewBox="0 0 24 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 5v6m5-9v12m5-14v16m5-13v10m5-8v6" /></svg></div><h2>ROUTE B INDUSTRIAL CRAFT.</h2><p>Inspect procedural weapons, lighting & telemetry</p><div className="activity-foot">OPEN NIGHT GARAGE IN TOP NAV</div></article>
                 </section>
               </>
             ) : (

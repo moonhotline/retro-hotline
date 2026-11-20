@@ -194,26 +194,21 @@ describe('full-auto rifle and dedicated controls', () => {
     expect(engine.stats().ammo.deagle).toBe(6)
   })
 
-  it('binds V to Pulse Parry, airborne C/G to Kinetic Slam, and grounded C to Slide', () => {
+  it('permanently ignores V, C, ControlLeft and G keys (no slide, parry, or slam)', () => {
     const parry = vi.spyOn(engine['abilities'], 'tryPulseParry')
     const slam = vi.spyOn(engine['abilities'], 'tryKineticSlam')
     key('KeyC')
-    expect(engine['slideT']).toBeGreaterThan(0)
+    key('ControlLeft')
+    expect(engine['slideT']).toBe(0)
     expect(slam).not.toHaveBeenCalled()
 
     engine['grounded'] = false
     engine.playerPos().y += 10
     key('KeyC')
-    expect(slam).toHaveBeenCalledTimes(1)
-
     key('KeyV')
-    expect(parry).toHaveBeenCalledTimes(1)
-
-    engine['abilities'].reset()
-    engine['grounded'] = false
-    engine.playerPos().y += 10
     key('KeyG')
-    expect(slam).toHaveBeenCalledTimes(2)
+    expect(parry).not.toHaveBeenCalled()
+    expect(slam).not.toHaveBeenCalled()
   })
 
   it('supports Prism Scattergun 6-ray burst and Gauss Sniper multi-enemy piercing', () => {
@@ -325,7 +320,7 @@ describe('engine glory kill integration', () => {
     expect(engine['pickups']).toHaveLength(0)
   })
 
-  it('keeps punch fallback, slide, weapon swap and reload working', () => {
+  it('keeps punch fallback, weapon swap and reload working while C remains disabled', () => {
     const enemy = target(3, false)
     key('KeyF')
     expect(engine.stats().kills).toBe(1)
@@ -334,7 +329,7 @@ describe('engine glory kill integration', () => {
     expect(engine['director'].enemies).not.toContain(enemy)
     expect(engine['punchCd']).toBeGreaterThan(0)
     key('KeyC')
-    expect(engine['slideT']).toBeGreaterThan(0)
+    expect(engine['slideT']).toBe(0)
     key('KeyQ')
     expect(engine.stats().weapon).toBe('deagle')
     engine['ammo'].deagle = 1
