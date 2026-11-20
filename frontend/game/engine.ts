@@ -8,10 +8,12 @@ import { resolveWalls } from './map'
 import {
   buildGun,
   DRONE_STATS,
+  makeHazardCanister,
   makePickup,
   makeShockwave,
   Particles,
   WEAPONS,
+  type HazardParts,
   type PickupParts,
   type Shockwave,
 } from './effects'
@@ -58,6 +60,14 @@ interface ActivePickup {
   healAmount: number
 }
 
+interface ActiveHazard {
+  parts: HazardParts
+  baseY: number
+  spotIndex: number
+}
+
+const PRISM_TRACERS = [0xff2e7e, 0xffb84d, 0x4dffd2, 0x29e3ff, 0x528bff, 0xb95cff] as const
+
 interface TracerPopup extends Popup {
   born: number
 }
@@ -75,6 +85,7 @@ export class GameEngine implements CombatHost {
   private onHud: (s: HudState) => void
   private renderer: THREE.WebGLRenderer
   private composer: EffectComposer
+  private bloomPass: UnrealBloomPass
   scene = new THREE.Scene()
   camera: THREE.PerspectiveCamera
   private clock = new THREE.Clock()
@@ -123,9 +134,10 @@ export class GameEngine implements CombatHost {
   private ammo: Record<WeaponId, number> = {
     rifle: WEAPONS.rifle.mag,
     deagle: WEAPONS.deagle.mag,
+    prism: WEAPONS.prism.mag,
     sniper: WEAPONS.sniper.mag,
   }
-  unlockedWeapons: WeaponId[] = ['rifle', 'deagle']
+  unlockedWeapons: WeaponId[] = ['rifle', 'deagle', 'prism']
   isAiming = false
   attackSpeedMult = 1.0
   private firing = false
@@ -158,6 +170,9 @@ export class GameEngine implements CombatHost {
   private tracers: { mesh: THREE.Mesh; life: number }[] = []
   private shockwaves: Shockwave[] = []
   private pickups: ActivePickup[] = []
+  private hazards: ActiveHazard[] = []
+  private boostTimer = 0
+  private boostDir = new THREE.Vector3()
   private cacheAlive: boolean[] = CACHE_SPOTS.map(() => false)
   private waveDamaged = false
 
@@ -217,10 +232,12 @@ export class GameEngine implements CombatHost {
 
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.32, 0.4, 0.4))
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.26, 0.48, 0.58)
+    this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
 
     this.env = buildEnvironment(this.scene)
+    this.env.applyStageTheme?.(this.levelManager.currentStage.environment)
     this.particles = new Particles(this.scene)
     this.gunRig = buildGun(this.camera)
     this.director = new WaveDirector(this)
@@ -528,12 +545,18 @@ export class GameEngine implements CombatHost {
   deflectProjectile(projectile: Projectile, dt: number) {
     const reflected = this.abilities.deflectProjectile(projectile, dt)
     if (reflected) {
-      this.hackManager.onParry({ refillMagazine: () => {
-        this.ammo[this.weapon] = WEAPONS[this.weapon].mag
-        this.reloading = false
-        this.reloadT = 0
-        this.magDropped = false
-      } })
+      this.hackManager.onParry({
+        refillMagazine: () => {
+          this.ammo[this.weapon] = WEAPONS[this.weapon].mag
+          this.reloading = false
+          this.reloadT = 0
+          this.magDropped = false
+        },
+        grantOvercharge: (seconds: number) => {
+          this.overchargeT = Math.max(this.overchargeT, seconds)
+          this.setBanner('PARRY OVERCLOCK')
+        },
+      })
     }
     return reflected
   }
@@ -585,6 +608,8 @@ export class GameEngine implements CombatHost {
     this.waveDamaged = true
     this.combo = 0
     this.music.setComboRank(this.combo)
+    this.env.setComboIntensity?.(1)
+    this.bloomPass.strength = 0.26
     this.comboTimer = 0
     this.lastMult = 1
     this.addShake(0.75)
@@ -617,6 +642,13 @@ export class GameEngine implements CombatHost {
       if (mult >= 4) this.timescale = Math.min(this.timescale, 0.45)
     }
     this.lastMult = mult
+    this.env.setComboIntensity?.(mult)
+    this.bloomPass.strength = 0.26 + (mult - 1) * 0.045
+    const siphonHeal = this.hackManager.killHealAmount(mult)
+    if (siphonHeal > 0) {
+      this.health = Math.min(this.maxHealth, this.health + siphonHeal)
+      this.pushPopup(`+${siphonHeal} HP`, 'heal', position)
+    }
     const pts = DRONE_STATS[type].points * mult
     this.score += pts
     this.kills++
@@ -657,13 +689,41 @@ export class GameEngine implements CombatHost {
     this.music.triggerFilterDrop()
   }
 
+  onFrozenKill(position: THREE.Vector3) {
+    const shattered = this.hackManager.onFrozenKill(position, {
+      enemies: this.director.enemies,
+      damageEnemy: (target, amount, bypass) => this.director.damageEnemy(target, amount, bypass),
+      canHit: (a, b) => this.clearShot(a, b),
+      arc: (a, b) => this.electricArc(a, b),
+    })
+    if (shattered > 0) {
+      this.shockwave(position, 0x00f0ff, 9)
+      this.pushPopup('CRYO SHATTER', 'crit', position)
+    }
+  }
+
+  onBossPhaseChange(phase: 2 | 3) {
+    this.setBanner(phase === 2 ? 'BOSS PHASE II // SPIRAL BARRAGE' : 'BOSS PHASE III // CRITICAL OVERDRIVE')
+    this.hitstop(0.15, 0.16)
+  }
+
   onWaveStart(_wave: number) {
     this.waveDamaged = false
     this.respawnCaches()
+    this.respawnHazards()
     this.sfx.waveStart()
   }
 
   onWaveClear() {
+    const clearedWave = this.director.wave
+    if (clearedWave > 0 && clearedWave % 4 === 0 && this.levelManager.nextStage()) {
+      const next = this.levelManager.currentStage
+      this.env.applyStageTheme?.(next.environment)
+      this.setBanner(`CHAPTER 0${next.chapter} // ${next.name}`)
+      this.sfx.fanfare()
+      this.timescale = 0.35
+      return
+    }
     if (!this.waveDamaged) {
       const bonus = 500 * Math.max(1, this.director.wave)
       this.score += bonus
@@ -812,6 +872,11 @@ export class GameEngine implements CombatHost {
       }
     }
     if (e.code === 'KeyQ') this.switchWeapon()
+    if (!e.repeat && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3' || e.code === 'Digit4')) {
+      const idx = Number(e.code.slice(5)) - 1
+      const chosen = this.unlockedWeapons[idx]
+      if (chosen && chosen !== this.weapon) this.selectWeapon(chosen)
+    }
     if (e.code === 'KeyE' && !e.repeat) {
       if (this.levelManager.activeInteractable) {
         if (this.levelManager.interact()) {
@@ -831,7 +896,19 @@ export class GameEngine implements CombatHost {
       if (this.director.hackSniperShot()) this.emit(true)
       else this.tryPunch()
     }
-    if (e.code === 'KeyC' || e.code === 'ControlLeft') this.trySlide()
+    if (e.code === 'KeyV' && !e.repeat) {
+      if (this.abilities.tryPulseParry()) this.sfx.gloryPing()
+    }
+    if (e.code === 'KeyG' && !e.repeat) {
+      if (this.abilities.tryKineticSlam()) this.sfx.whoosh()
+    }
+    if (e.code === 'KeyC' || e.code === 'ControlLeft') {
+      if (!this.grounded && !e.repeat) {
+        if (this.abilities.tryKineticSlam()) this.sfx.whoosh()
+      } else {
+        this.trySlide()
+      }
+    }
     if (e.code === 'KeyR') this.tryReload()
   }
 
@@ -853,7 +930,12 @@ export class GameEngine implements CombatHost {
     if (this.swapT > 0) return
     const idx = this.unlockedWeapons.indexOf(this.weapon)
     const nextIdx = (idx + 1) % this.unlockedWeapons.length
-    this.weapon = this.unlockedWeapons[nextIdx] ?? 'rifle'
+    this.selectWeapon(this.unlockedWeapons[nextIdx] ?? 'rifle')
+  }
+
+  private selectWeapon(next: WeaponId) {
+    if (this.swapT > 0) return
+    this.weapon = next
     this.isAiming = false
     this.reloading = false
     this.triggerQueued = false
@@ -943,7 +1025,7 @@ export class GameEngine implements CombatHost {
     this.addShake(w.shake)
     const flashScale = w.flash * (this.overchargeT > 0 ? 1.4 : 1) * (0.8 + Math.random() * 0.4)
     this.gunRig.flash.scale.set(flashScale, flashScale, 1)
-    if (this.weapon === 'deagle') this.sfx.deagle()
+    if (this.weapon === 'deagle' || this.weapon === 'prism') this.sfx.deagle()
     else if (this.weapon === 'sniper') this.sfx.sniper()
     else this.sfx.shoot()
 
@@ -951,50 +1033,131 @@ export class GameEngine implements CombatHost {
     const casingPos = this.camera.localToWorld(new THREE.Vector3(0.62, -0.5, -1.1))
     this.particles.burst(casingPos, CASING_COLOR, 2, 2.2, 0.5)
 
+    this.scene.updateMatrixWorld(true)
     this.camera.updateMatrixWorld()
     const from = this.camera.localToWorld(new THREE.Vector3(0.52, -0.28, -1.6))
+    const chronoMult = this.hackManager.chronoDamageMultiplier(this.chronoTimeScale)
+    const hazardProxies = this.hazards.map((h) => h.parts.proxy)
+    const hitCtx = {
+      enemies: this.director.enemies,
+      damageEnemy: (target: Enemy, amount: number, bypass: boolean) => this.director.damageEnemy(target, amount, bypass),
+      canHit: (a: THREE.Vector3, b: THREE.Vector3) => this.clearShot(a, b),
+      arc: (_a: THREE.Vector3, b: THREE.Vector3) => this.particles.burst(b, SPARK_COLOR, 10, 6, 0.35),
+    }
+
+    if (this.weapon === 'prism') {
+      // Prism Scattergun: 6-pellet close-range spread with clean impact sparks (no cluttered beam sticks).
+      const pellets = PRISM_TRACERS.length
+      const targets = [...this.director.raycastTargets(), ...hazardProxies, ...this.env.collidables]
+      for (let i = 0; i < pellets; i++) {
+        const angle = ((i / (pellets - 1)) - 0.5) * 0.14
+        const lift = (i % 2 === 0 ? 1 : -1) * 0.022
+        this.raycaster.setFromCamera(new THREE.Vector2(angle, lift), this.camera)
+        this.raycaster.far = 48
+        const hit = this.raycaster.intersectObjects(targets, false)[0]
+        if (hit) {
+          const end = hit.point
+          const hazard = hit.object.userData['hazard'] as ActiveHazard | undefined
+          const enemy = hit.object.userData['enemy'] as Enemy | undefined
+          if (hazard) {
+            this.detonateHazard(hazard)
+          } else if (enemy) {
+            const crit = Math.random() < w.critChance
+            const dmg = w.dmg * chronoMult * (crit ? 1.8 : 1)
+            const killed = this.director.damageEnemy(enemy, dmg, true)
+            this.hitMarkerId++
+            this.hitMarkerCrit = crit
+            if (crit) this.sfx.crit()
+            else this.sfx.hit()
+            if (!killed) this.particles.burst(end, new THREE.Color(PRISM_TRACERS[i]!), 6, 6, 0.35)
+            const origin = end.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
+            this.hackManager.onHit(enemy, dmg, { position: origin, kind: 'bullet', ignoreShield: true }, hitCtx)
+          } else {
+            this.particles.burst(end, new THREE.Color(PRISM_TRACERS[i]!), 4, 4, 0.3)
+          }
+        }
+      }
+      if (this.ammo[this.weapon] === 0) this.tryReload()
+      return
+    }
+
     this.raycaster.setFromCamera(CENTER, this.camera)
     this.raycaster.far = 200
-
-    const targets = [...this.director.raycastTargets(), ...this.env.collidables]
+    const targets = [...this.director.raycastTargets(), ...hazardProxies, ...this.env.collidables]
     const hits = this.raycaster.intersectObjects(targets, false)
-    const hit = hits[0]
 
-    let end: THREE.Vector3
-    if (hit) {
-      end = hit.point
-      const enemy = hit.object.userData['enemy'] as Enemy | undefined
-      let damage = w.dmg
-      let ignoreShield = this.weapon === 'deagle' || this.weapon === 'sniper'
-      if (enemy) {
+    if (this.weapon === 'sniper') {
+      // Gauss Sniper: true piercing railgun passes through every enemy until solid cover.
+      let end = this.raycaster.ray.at(190, new THREE.Vector3())
+      let pierceCount = 0
+      const hitEnemies = new Set<Enemy>()
+      for (const hit of hits) {
+        const hazard = hit.object.userData['hazard'] as ActiveHazard | undefined
+        if (hazard) {
+          this.detonateHazard(hazard)
+          continue
+        }
+        const enemy = hit.object.userData['enemy'] as Enemy | undefined
+        if (!enemy) {
+          end = hit.point
+          this.particles.burst(end, SPARK_COLOR, 10, 6, 0.4)
+          break
+        }
+        if (hitEnemies.has(enemy)) continue
+        hitEnemies.add(enemy)
+        pierceCount++
         const crit = Math.random() < w.critChance
-        const dmg = w.dmg * (crit ? 2 : 1)
+        const dmg = w.dmg * chronoMult * (crit ? 2 : 1)
+        const killed = this.director.damageEnemy(enemy, dmg, true)
+        this.hitMarkerId++
+        this.hitMarkerCrit = crit || pierceCount >= 2
+        if (crit) this.sfx.crit()
+        else this.sfx.hit()
+        if (!killed) this.particles.burst(hit.point, SPARK_COLOR, 16, 8, 0.45)
+        else this.timescale = Math.min(this.timescale, 0.45)
+        const origin = hit.point.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
+        this.hackManager.onHit(enemy, dmg, { position: origin, kind: 'bullet', ignoreShield: true }, hitCtx)
+      }
+      if (pierceCount >= 2) this.setBanner(`RAIL PIERCE ×${pierceCount}`)
+      this.addTracer(from, end, w.tracer, 0.015)
+      if (this.ammo[this.weapon] === 0) this.tryReload()
+      return
+    }
+
+    const hit = hits[0]
+    if (hit) {
+      const end = hit.point
+      const hazard = hit.object.userData['hazard'] as ActiveHazard | undefined
+      const enemy = hit.object.userData['enemy'] as Enemy | undefined
+      let damage = w.dmg * chronoMult
+      let ignoreShield = this.weapon === 'deagle'
+      if (hazard) {
+        this.detonateHazard(hazard)
+      } else if (enemy) {
+        const crit = Math.random() < w.critChance
+        const dmg = w.dmg * chronoMult * (crit ? 2 : 1)
         damage = dmg
         ignoreShield ||= crit
-        // The Eagle and Gauss Sniper punch through armor; the rifle does not
+        // The Eagle punches through armor; the rifle does not unless crit
         const killed = this.director.damageEnemy(enemy, dmg, ignoreShield)
         this.hitMarkerId++
         this.hitMarkerCrit = crit
         if (crit) this.sfx.crit()
         else this.sfx.hit()
         if (!killed) this.particles.burst(end, SPARK_COLOR, crit ? 16 : 9, 7, 0.4)
-        if (killed && (this.weapon === 'deagle' || this.weapon === 'sniper')) {
+        if (killed && this.weapon === 'deagle') {
           this.timescale = Math.min(this.timescale, 0.45) // heavy caliber hit-stop
+          if (crit) {
+            this.ammo.deagle = Math.min(WEAPONS.deagle.mag, this.ammo.deagle + 2)
+            this.pushPopup('+2 AMMO', 'gem', end)
+          }
         }
       } else {
         this.particles.burst(end, SPARK_COLOR, 8, 5, 0.35)
       }
       const origin = end.clone().addScaledVector(this.raycaster.ray.direction, -0.02)
-      this.hackManager.onHit(enemy ?? null, damage, { position: origin, kind: 'bullet', ignoreShield }, {
-        enemies: this.director.enemies,
-        damageEnemy: (target, amount, bypass) => this.director.damageEnemy(target, amount, bypass),
-        canHit: (a, b) => this.clearShot(a, b),
-        arc: (a, b) => this.addTracer(a, b, 0xffd319, w.tracerWidth),
-      })
-    } else {
-      end = this.raycaster.ray.at(160, new THREE.Vector3())
+      this.hackManager.onHit(enemy ?? null, damage, { position: origin, kind: 'bullet', ignoreShield }, hitCtx)
     }
-    this.addTracer(from, end, w.tracer, w.tracerWidth)
     if (this.ammo[this.weapon] === 0) this.tryReload()
   }
 
@@ -1026,11 +1189,8 @@ export class GameEngine implements CombatHost {
     return ray.intersectObjects(this.env.collidables, false).length === 0
   }
 
-  private electricArc(from: THREE.Vector3, to: THREE.Vector3) {
-    const bend = from.clone().lerp(to, 0.5).add(new THREE.Vector3(0.4, 0.65, -0.3))
-    this.addTracer(from, bend, 0x00f0ff, 0.035)
-    this.addTracer(bend, to, 0x00f0ff, 0.035)
-    this.particles.burst(to, SPARK_COLOR, 8, 5, 0.3)
+  private electricArc(_from: THREE.Vector3, to: THREE.Vector3) {
+    this.particles.burst(to, SPARK_COLOR, 14, 7, 0.38)
   }
 
   // ---------- terrain helpers ----------
@@ -1086,6 +1246,56 @@ export class GameEngine implements CombatHost {
       this.cacheAlive[i] = true
       this.spawnPickup(new THREE.Vector3(spot[0]!, spot[1]!, spot[2]!), i)
     })
+  }
+
+  /** Volatile plasma/cryo canisters spawned across bridge & courtyard choke points. */
+  private respawnHazards() {
+    const spots = this.env.hazardSpots ?? []
+    spots.forEach((spot, i) => {
+      if (this.hazards.some((h) => h.spotIndex === i)) return
+      const parts = makeHazardCanister(spot.kind)
+      parts.group.position.set(spot.x, spot.y, spot.z)
+      const active: ActiveHazard = { parts, baseY: spot.y, spotIndex: i }
+      parts.proxy.userData['hazard'] = active
+      this.scene.add(parts.group)
+      this.hazards.push(active)
+    })
+  }
+
+  private detonateHazard(hazard: ActiveHazard) {
+    const idx = this.hazards.indexOf(hazard)
+    if (idx < 0) return
+    this.hazards.splice(idx, 1)
+    delete hazard.parts.proxy.userData['hazard']
+    const pos = hazard.parts.group.position.clone()
+    this.scene.remove(hazard.parts.group)
+    this.disposeGroup(hazard.parts.group)
+
+    const isCryo = hazard.parts.kind === 'cryo'
+    const radius = 11
+    this.shockwave(pos, isCryo ? 0x00f0ff : 0xff4d2e, radius)
+    this.particles.burst(pos, new THREE.Color(isCryo ? 0x00f0ff : 0xff7b29), 42, 13, 0.75)
+    this.sfx.explode(true, this.sfxPan(pos))
+    this.addShake(0.7)
+    this.hitstop(0.08, 0.08)
+    this.pushPopup(isCryo ? 'CRYO BLAST' : 'PLASMA BLAST', 'crit', pos)
+
+    for (const enemy of [...this.director.enemies]) {
+      if (enemy.parts.group.position.distanceTo(pos) > radius) continue
+      if (isCryo) {
+        enemy.frozenTimer = Math.max(enemy.frozenTimer ?? 0, 4.0)
+        const killed = this.director.damageEnemy(enemy, 6, true)
+        if (!killed) this.director.staggerEnemy(enemy)
+      } else {
+        this.director.damageEnemy(enemy, 18, true)
+      }
+    }
+    // Chain-detonate adjacent canisters within blast radius
+    for (const other of [...this.hazards]) {
+      if (other.parts.group.position.distanceTo(pos) <= radius) {
+        this.detonateHazard(other)
+      }
+    }
   }
 
   // ---------- helpers ----------
@@ -1182,6 +1392,8 @@ export class GameEngine implements CombatHost {
       isAiming: this.isAiming,
       unlockedWeapons: [...this.unlockedWeapons],
       pointerLocked: this.isLocked(),
+      bossHud: this.director.activeBossHud(),
+      waveProtocol: this.director.activeProtocol(),
     }
     const key = JSON.stringify(snap)
     if (force || key !== this.lastEmit) {
@@ -1220,7 +1432,19 @@ export class GameEngine implements CombatHost {
       this.disposeGroup(p.parts.group)
     }
     this.pickups = []
+    for (const h of this.hazards) {
+      delete h.parts.proxy.userData['hazard']
+      this.scene.remove(h.parts.group)
+      this.disposeGroup(h.parts.group)
+    }
+    this.hazards = []
+    this.boostTimer = 0
+    this.boostDir.set(0, 0, 0)
     this.cacheAlive = CACHE_SPOTS.map(() => false)
+    this.levelManager.loadStage(0)
+    this.env.applyStageTheme?.(this.levelManager.currentStage.environment)
+    this.env.setComboIntensity?.(1)
+    this.bloomPass.strength = 0.26
     for (const s of this.shockwaves) {
       this.scene.remove(s.line)
       this.disposeGroup(s.line)
@@ -1237,6 +1461,8 @@ export class GameEngine implements CombatHost {
     this.gloryKillCount = 0
     this.combo = 0
     this.music.setComboRank(this.combo)
+    this.env.setComboIntensity?.(1)
+    this.bloomPass.strength = 0.26
     this.comboTimer = 0
     this.bestCombo = 0
     this.lastMult = 1
@@ -1244,12 +1470,13 @@ export class GameEngine implements CombatHost {
     this.lastHitAt = -99
     this.popups = []
     this.weapon = 'rifle'
-    this.unlockedWeapons = ['rifle', 'deagle']
+    this.unlockedWeapons = ['rifle', 'deagle', 'prism']
     this.isAiming = false
     this.attackSpeedMult = 1.0
     this.ammo = {
       rifle: WEAPONS.rifle.mag,
       deagle: WEAPONS.deagle.mag,
+      prism: WEAPONS.prism.mag,
       sniper: WEAPONS.sniper.mag,
     }
     this.reloading = false
@@ -1475,6 +1702,25 @@ export class GameEngine implements CombatHost {
     if (this.grounded) this.abilities.onLanding()
     if (this.draftHacks.length > 0) return
 
+    // Kinetic Boost Strips along the bridge & campus
+    if (this.boostTimer > 0) {
+      this.boostTimer = Math.max(0, this.boostTimer - dtRaw)
+      if (!dashing) {
+        this.pos.x += this.boostDir.x * 16 * dt
+        this.pos.z += this.boostDir.z * 16 * dt
+      }
+    }
+    if (this.grounded) {
+      for (const strip of this.env.boostStrips ?? []) {
+        if (Math.abs(this.pos.x - strip.x) <= strip.hw && Math.abs(this.pos.z - strip.z) <= strip.hd) {
+          if (this.boostTimer <= 0.4) this.sfx.whoosh()
+          this.boostTimer = 1.4
+          this.boostDir.set(strip.dirX, 0, strip.dirZ)
+          break
+        }
+      }
+    }
+
     // Jump pads
     if (this.grounded) {
       for (const pad of this.env.pads) {
@@ -1508,7 +1754,7 @@ export class GameEngine implements CombatHost {
     const bob = this.grounded && this.slideT <= 0 ? Math.sin(this.bobT) * 0.06 : 0
     const slideK = this.slideT > 0 ? Math.sin((1 - this.slideT / SLIDE_TIME) * Math.PI) : 0
     const slideDip = slideK * 0.9
-    let baseFov = (sprintKey ? 82 : 75) + slideK * 8
+    let baseFov = (sprintKey ? 82 : 75) + slideK * 8 + (this.boostTimer > 0 ? 7 : 0)
     if (this.isAiming && this.weapon === 'sniper') {
       baseFov = 24
     }
@@ -1535,7 +1781,13 @@ export class GameEngine implements CombatHost {
 
     // ---- weapon pose ----
     const w = WEAPONS[this.weapon]
-    const gun = this.weapon === 'rifle' ? this.gunRig.rifle : this.weapon === 'deagle' ? this.gunRig.deagle : this.gunRig.sniper
+    const gun = this.weapon === 'rifle'
+      ? this.gunRig.rifle
+      : this.weapon === 'deagle'
+        ? this.gunRig.deagle
+        : this.weapon === 'prism'
+          ? this.gunRig.prism
+          : this.gunRig.sniper
     this.gunKick = Math.max(0, this.gunKick - dt * 4.5)
     let gy2 = -0.42
     let rotX = 0
@@ -1606,6 +1858,13 @@ export class GameEngine implements CombatHost {
         }
         this.director.queueRoomWave(dronesToQueue)
       }
+    }
+
+    // Animate volatile canisters
+    for (let i = 0; i < this.hazards.length; i++) {
+      const h = this.hazards[i]!
+      h.parts.group.rotation.y += dt * 1.4
+      h.parts.group.position.y = h.baseY + Math.sin(t * 2.2 + i) * 0.14
     }
 
     // Pickups
@@ -1724,6 +1983,7 @@ export class GameEngine implements CombatHost {
     const showGun = this.status !== 'menu'
     this.gunRig.rifle.visible = showGun && this.weapon === 'rifle' && !this.isAiming
     this.gunRig.deagle.visible = showGun && this.weapon === 'deagle'
+    this.gunRig.prism.visible = showGun && this.weapon === 'prism'
     this.gunRig.sniper.visible = showGun && this.weapon === 'sniper' && !this.isAiming
     if (this.status === 'playing') {
       this.update(dt, rawDelta)

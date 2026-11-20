@@ -69,6 +69,81 @@ export function edgeBox(
   return new THREE.LineSegments(geo, mat)
 }
 
+let skyscraperTex: THREE.CanvasTexture | null = null
+
+/** Procedural nocturnal glass-tower facade texture with glowing skyscraper windows. */
+export function skyscraperWindowTexture(): THREE.CanvasTexture {
+  if (skyscraperTex) return skyscraperTex
+  const c = document.createElement('canvas')
+  c.width = 128
+  c.height = 256
+  const ctx = c.getContext('2d')
+  if (!ctx) {
+    skyscraperTex = new THREE.CanvasTexture(c)
+    return skyscraperTex
+  }
+  ctx.fillStyle = '#091020'
+  ctx.fillRect(0, 0, 128, 256)
+  // Subtle metallic mullions
+  ctx.fillStyle = '#0e172c'
+  for (let x = 0; x < 128; x += 16) ctx.fillRect(x, 0, 2, 256)
+  let s = 42
+  const rnd = () => {
+    s = (s * 16807) % 2147483647
+    return s / 2147483647
+  }
+  for (let row = 4; row < 248; row += 10) {
+    const floorLit = rnd() > 0.34
+    for (let col = 4; col < 122; col += 12) {
+      if (!floorLit || rnd() > 0.62) continue
+      const warm = rnd() > 0.52
+      const alpha = 0.25 + rnd() * 0.65
+      ctx.fillStyle = warm
+        ? `rgba(255, 198, 138, ${alpha})`
+        : `rgba(128, 224, 255, ${alpha})`
+      ctx.fillRect(col, row, 7, 5)
+    }
+  }
+  skyscraperTex = new THREE.CanvasTexture(c)
+  skyscraperTex.wrapS = THREE.RepeatWrapping
+  skyscraperTex.wrapT = THREE.RepeatWrapping
+  return skyscraperTex
+}
+
+/** Dark brushed-gunmetal PBR architectural block with restrained subtle neon trim. */
+export function solidEdgeBox(
+  w: number,
+  h: number,
+  d: number,
+  edgeColor: number,
+  opacity = 0.45,
+  coreColor = 0x111a2c,
+  coreOpacity = 1
+): THREE.Group {
+  const group = new THREE.Group()
+  const boxGeo = new THREE.BoxGeometry(w, h, d)
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: coreColor,
+    roughness: 0.46,
+    metalness: 0.58,
+    transparent: coreOpacity < 1,
+    opacity: coreOpacity,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  })
+  const core = new THREE.Mesh(boxGeo, coreMat)
+  group.add(core)
+  if (opacity > 0.02) {
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(boxGeo),
+      new THREE.LineBasicMaterial({ color: edgeColor, transparent: true, opacity: Math.min(opacity, 0.42) })
+    )
+    group.add(edges)
+  }
+  return group
+}
+
 /** Invisible collision proxy used for raycast hit detection. */
 export function ghostSphere(r: number): THREE.Mesh {
   return new THREE.Mesh(
@@ -135,6 +210,22 @@ export const WEAPONS: Record<WeaponId, WeaponStats> = {
     tracerWidth: 0.06,
     flash: 1.5,
   },
+  prism: {
+    name: 'PRISM SCATTER',
+    label: 'PRISM SCATTER',
+    mag: 6,
+    fireCd: 0.62,
+    dmg: 1.85,
+    auto: false,
+    reloadTime: 1.65,
+    recoil: 0.065,
+    kick: 0.48,
+    shake: 0.4,
+    critChance: 0.22,
+    tracer: 0x29e3ff,
+    tracerWidth: 0.04,
+    flash: 1.7,
+  },
   sniper: {
     name: 'GAUSS SNIPER',
     label: 'GAUSS SNIPER',
@@ -156,62 +247,98 @@ export const WEAPONS: Record<WeaponId, WeaponStats> = {
 export interface GunRig {
   rifle: THREE.Group
   deagle: THREE.Group
+  prism: THREE.Group
   sniper: THREE.Group
   flash: THREE.Sprite
 }
 
-/** Three neon-outline viewmodel weapons attached to the camera. */
+/** Four sleek brushed-gunmetal PBR viewmodel weapons with recessed emissive energy strips. */
 export function buildGun(camera: THREE.PerspectiveCamera): GunRig {
+  const gunMetal = (color: number, metalness = 0.78, roughness = 0.3) =>
+    new THREE.MeshStandardMaterial({ color, metalness, roughness })
+  const stripMat = (color: number) =>
+    new THREE.MeshBasicMaterial({ color })
+  const part = (w: number, h: number, d: number, mat: THREE.Material) =>
+    new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
+
   const rifle = new THREE.Group()
-  const body = edgeBox(0.14, 0.18, 0.66, 0x00f0ff)
-  const barrel = edgeBox(0.08, 0.08, 0.56, 0xff2975)
-  barrel.position.set(0, 0.05, -0.56)
-  const grip = edgeBox(0.12, 0.26, 0.16, 0x8a2be2)
-  grip.position.set(0, -0.2, 0.2)
-  grip.rotation.x = 0.3
-  const sight = edgeBox(0.05, 0.08, 0.14, 0x00f0ff)
-  sight.position.set(0, 0.14, -0.2)
-  rifle.add(body, barrel, grip, sight)
-  rifle.position.set(0.52, -0.42, -0.95)
-  rifle.rotation.y = 0.05
+  const body = part(0.13, 0.16, 0.68, gunMetal(0x182336))
+  const shroud = part(0.145, 0.06, 0.42, gunMetal(0x0f1624, 0.85, 0.25))
+  shroud.position.set(0, 0.06, -0.1)
+  const barrel = part(0.055, 0.055, 0.52, gunMetal(0x23324a, 0.88, 0.22))
+  barrel.position.set(0, 0.03, -0.54)
+  const rail = part(0.025, 0.014, 0.46, stripMat(0x38e8ff))
+  rail.position.set(0, 0.095, -0.14)
+  const grip = part(0.1, 0.24, 0.14, gunMetal(0x101724, 0.4, 0.65))
+  grip.position.set(0, -0.18, 0.2)
+  grip.rotation.x = 0.28
+  rifle.add(body, shroud, barrel, rail, grip)
+  rifle.position.set(0.48, -0.38, -0.92)
+  rifle.rotation.y = 0.04
   camera.add(rifle)
 
   const deagle = new THREE.Group()
-  const slideBox = edgeBox(0.16, 0.2, 0.4, 0xffd319)
-  const deagleBarrel = edgeBox(0.12, 0.12, 0.34, 0xff2975)
-  deagleBarrel.position.set(0, 0.03, -0.34)
-  const deagleGrip = edgeBox(0.14, 0.3, 0.2, 0xffd319)
-  deagleGrip.position.set(0, -0.24, 0.12)
-  deagleGrip.rotation.x = 0.25
-  const deagleSight = edgeBox(0.05, 0.07, 0.1, 0xff2975)
-  deagleSight.position.set(0, 0.15, -0.1)
-  deagle.add(slideBox, deagleBarrel, deagleGrip, deagleSight)
-  deagle.position.set(0.52, -0.42, -0.95)
-  deagle.rotation.y = 0.05
+  const slideBox = part(0.13, 0.16, 0.44, gunMetal(0x2a3344, 0.88, 0.2))
+  const deagleBarrel = part(0.09, 0.09, 0.24, gunMetal(0x141b29, 0.85, 0.28))
+  deagleBarrel.position.set(0, 0.02, -0.30)
+  const deagleTrim = part(0.02, 0.016, 0.36, stripMat(0xffc861))
+  deagleTrim.position.set(0, 0.086, -0.02)
+  const deagleGrip = part(0.11, 0.26, 0.17, gunMetal(0x121824, 0.45, 0.6))
+  deagleGrip.position.set(0, -0.2, 0.12)
+  deagleGrip.rotation.x = 0.24
+  deagle.add(slideBox, deagleBarrel, deagleTrim, deagleGrip)
+  deagle.position.set(0.48, -0.38, -0.92)
+  deagle.rotation.y = 0.04
   deagle.visible = false
   camera.add(deagle)
 
+  const prism = new THREE.Group()
+  const prismChassis = part(0.18, 0.17, 0.56, gunMetal(0x152034, 0.82, 0.26))
+  const prismLeftRail = part(0.045, 0.075, 0.5, gunMetal(0x1e2c44, 0.88, 0.22))
+  prismLeftRail.position.set(-0.075, 0.03, -0.42)
+  const prismRightRail = part(0.045, 0.075, 0.5, gunMetal(0x1e2c44, 0.88, 0.22))
+  prismRightRail.position.set(0.075, 0.03, -0.42)
+  const prismLeftGlow = part(0.014, 0.02, 0.46, stripMat(0xff4d88))
+  prismLeftGlow.position.set(-0.075, 0.072, -0.42)
+  const prismRightGlow = part(0.014, 0.02, 0.46, stripMat(0x38e8ff))
+  prismRightGlow.position.set(0.075, 0.072, -0.42)
+  const prismCore = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.055, 0),
+    new THREE.MeshBasicMaterial({ color: 0x56ffd8 })
+  )
+  prismCore.position.set(0, 0.085, -0.28)
+  const prismGrip = part(0.11, 0.24, 0.15, gunMetal(0x101724, 0.45, 0.6))
+  prismGrip.position.set(0, -0.19, 0.16)
+  prismGrip.rotation.x = 0.26
+  prism.add(prismChassis, prismLeftRail, prismRightRail, prismLeftGlow, prismRightGlow, prismCore, prismGrip)
+  prism.position.set(0.48, -0.38, -0.92)
+  prism.rotation.y = 0.04
+  prism.visible = false
+  camera.add(prism)
+
   const sniper = new THREE.Group()
-  const sniperBody = edgeBox(0.12, 0.16, 0.85, 0xff2975)
-  const sniperBarrel = edgeBox(0.06, 0.06, 1.05, 0x00f0ff)
-  sniperBarrel.position.set(0, 0.04, -0.9)
-  const sniperScope = edgeBox(0.08, 0.1, 0.35, 0xffd319)
-  sniperScope.position.set(0, 0.15, -0.15)
-  const sniperGrip = edgeBox(0.1, 0.28, 0.16, 0x8a2be2)
-  sniperGrip.position.set(0, -0.22, 0.25)
-  sniperGrip.rotation.x = 0.25
-  sniper.add(sniperBody, sniperBarrel, sniperScope, sniperGrip)
-  sniper.position.set(0.52, -0.42, -0.95)
-  sniper.rotation.y = 0.05
+  const sniperBody = part(0.11, 0.14, 0.84, gunMetal(0x151d2e, 0.82, 0.28))
+  const sniperBarrel = part(0.048, 0.048, 1.02, gunMetal(0x26354d, 0.9, 0.2))
+  sniperBarrel.position.set(0, 0.03, -0.88)
+  const sniperRail = part(0.016, 0.014, 0.88, stripMat(0xff4d79))
+  sniperRail.position.set(0, 0.06, -0.82)
+  const sniperScope = part(0.065, 0.075, 0.34, gunMetal(0x0f1624, 0.85, 0.22))
+  sniperScope.position.set(0, 0.13, -0.14)
+  const sniperGrip = part(0.09, 0.24, 0.14, gunMetal(0x101724, 0.45, 0.6))
+  sniperGrip.position.set(0, -0.19, 0.24)
+  sniperGrip.rotation.x = 0.24
+  sniper.add(sniperBody, sniperBarrel, sniperRail, sniperScope, sniperGrip)
+  sniper.position.set(0.48, -0.38, -0.92)
+  sniper.rotation.y = 0.04
   sniper.visible = false
   camera.add(sniper)
 
-  const flash = makeGlowSprite(0x9ffcff, 0.7, 1)
-  flash.position.set(0.52, -0.28, -1.5)
+  const flash = makeGlowSprite(0xbef6ff, 0.65, 0.9)
+  flash.position.set(0.48, -0.26, -1.45)
   flash.visible = false
   camera.add(flash)
 
-  return { rifle, deagle, sniper, flash }
+  return { rifle, deagle, prism, sniper, flash }
 }
 
 export interface DroneStats {
@@ -223,7 +350,7 @@ export interface DroneStats {
   color: number
   coreColor: number
   height: number
-  kind: 'melee' | 'ranged' | 'sniper'
+  kind: 'melee' | 'ranged' | 'sniper' | 'support'
   label: string
 }
 
@@ -248,9 +375,13 @@ export const DRONE_STATS: Record<DroneType, DroneStats> = {
     hp: 3, speed: 4.5, damage: 18, points: 300, radius: 0.9,
     color: 0xff2244, coreColor: 0xff99aa, height: 9, kind: 'sniper', label: 'MARKSMAN',
   },
+  aegis: {
+    hp: 5, speed: 6.2, damage: 8, points: 260, radius: 0.85,
+    color: 0x39ff88, coreColor: 0xa6ffcf, height: 4.8, kind: 'support', label: 'AEGIS WEAVER',
+  },
   boss: {
     hp: 60, speed: 3.2, damage: 40, points: 1500, radius: 3.2,
-    color: 0xff2244, coreColor: 0xffd319, height: 4, kind: 'melee', label: 'THE BOSS',
+    color: 0xff2244, coreColor: 0xffd319, height: 4, kind: 'melee', label: 'APEX MAINFRAME',
   },
 }
 
@@ -261,24 +392,56 @@ export interface DroneParts {
   inner: THREE.LineLoop
   frame: THREE.LineLoop | null
   core: THREE.Sprite
+  hull?: THREE.Group
 }
 
-/** Vector-outline drone with a distinct silhouette per archetype. */
+/** 3D obsidian-and-neon drone with a distinct polyhedral silhouette per archetype. */
 export function makeDrone(type: DroneType): DroneParts {
   const st = DRONE_STATS[type]
   const group = new THREE.Group()
 
-  // Outer silhouette: triangle (brawler), crosshair circles (marksman),
-  // square frame (enforcer/boss), polygon circles otherwise.
   let seg = 40
   if (type === 'brawler') seg = 3
   else if (type === 'swarm') seg = 24
   else if (type === 'marksman') seg = 32
+  else if (type === 'aegis') seg = 6
 
-  const outer = circleLine(st.radius, st.color, seg)
-  const inner = circleLine(st.radius * 0.55, st.color, type === 'brawler' ? 3 : 20)
-  const core = makeGlowSprite(st.coreColor, st.radius * 2.2, 0.95)
+  const outer = circleLine(st.radius, st.color, seg, 0.42)
+  const inner = circleLine(st.radius * 0.55, st.color, type === 'brawler' ? 3 : type === 'aegis' ? 6 : 20, 0.28)
+  const core = makeGlowSprite(st.coreColor, st.radius * 1.9, 0.88)
   let frame: THREE.LineLoop | null = null
+
+  // Sculpted dark-titanium PBR polyhedral drone chassis
+  const hull = new THREE.Group()
+  let hullGeo: THREE.BufferGeometry
+  if (type === 'brawler' || type === 'marksman') {
+    hullGeo = new THREE.TetrahedronGeometry(st.radius * 0.68, 0)
+  } else if (type === 'enforcer' || type === 'boss') {
+    hullGeo = new THREE.DodecahedronGeometry(st.radius * 0.68, 0)
+  } else if (type === 'aegis') {
+    hullGeo = new THREE.OctahedronGeometry(st.radius * 0.7, 0)
+  } else {
+    hullGeo = new THREE.OctahedronGeometry(st.radius * 0.62, 0)
+  }
+  const hullMesh = new THREE.Mesh(
+    hullGeo,
+    new THREE.MeshStandardMaterial({
+      color: 0x162238,
+      metalness: 0.76,
+      roughness: 0.28,
+      emissive: new THREE.Color(st.color),
+      emissiveIntensity: 0.24,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    })
+  )
+  const hullEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(hullGeo),
+    new THREE.LineBasicMaterial({ color: st.color, transparent: true, opacity: 0.55 })
+  )
+  hull.add(hullMesh, hullEdges)
+  group.add(hull)
 
   if (type === 'enforcer' || type === 'boss') {
     const r = st.radius * 1.35
@@ -292,9 +455,13 @@ export function makeDrone(type: DroneType): DroneParts {
       new THREE.LineBasicMaterial({ color: 0xff2975, transparent: true })
     )
     group.add(frame)
+    if (type === 'boss') {
+      const crownRing = circleLine(st.radius * 1.15, 0xffd319, 12, 0.85)
+      crownRing.rotation.x = Math.PI / 2.6
+      hull.add(crownRing)
+    }
   }
   if (type === 'marksman') {
-    // Crosshair spokes
     const spokes = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(st.radius * 1.3, 0, 0),
@@ -311,7 +478,6 @@ export function makeDrone(type: DroneType): DroneParts {
     group.add(spokes)
   }
   if (type === 'gunner') {
-    // Forward barrel line
     const barrelLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, st.radius * 0.6),
@@ -321,10 +487,15 @@ export function makeDrone(type: DroneType): DroneParts {
     )
     group.add(barrelLine)
   }
+  if (type === 'aegis') {
+    const halo = circleLine(st.radius * 1.15, 0x00f0ff, 6, 0.75)
+    halo.rotation.x = Math.PI / 2
+    hull.add(halo)
+  }
 
   const proxy = ghostSphere(st.radius * 1.1)
   group.add(outer, inner, core, proxy)
-  return { group, proxy, outer, inner, frame, core }
+  return { group, proxy, outer, inner, frame, core, hull }
 }
 
 /** Glowing projectile bolt fired by ranged enemies. */
@@ -365,10 +536,11 @@ export class Particles {
     geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3))
 
     const mat = new THREE.PointsMaterial({
-      size: 0.26,
+      size: 0.24,
+      map: glowTexture(),
       vertexColors: true,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -486,5 +658,41 @@ export function makePickup(kind: PickupKind): PickupParts {
   const proxy = ghostSphere(0.7 * scale)
   group.add(ring, cross, glow, proxy)
   group.scale.setScalar(scale)
+  return { group, proxy, glow, kind }
+}
+
+export type HazardKind = 'plasma' | 'cryo'
+
+export interface HazardParts {
+  group: THREE.Group
+  proxy: THREE.Mesh
+  glow: THREE.Sprite
+  kind: HazardKind
+}
+
+/** Shootable volatile prism canister: plasma detonation or cryo freeze shockwave. */
+export function makeHazardCanister(kind: HazardKind): HazardParts {
+  const color = kind === 'cryo' ? 0x00f0ff : 0xff4d2e
+  const coreTint = kind === 'cryo' ? 0x051828 : 0x20080a
+  const group = new THREE.Group()
+  const cylGeo = new THREE.CylinderGeometry(0.55, 0.55, 1.6, 6)
+  const core = new THREE.Mesh(
+    cylGeo,
+    new THREE.MeshBasicMaterial({
+      color: coreTint,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    })
+  )
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(cylGeo),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 })
+  )
+  const band = circleLine(0.75, color, 6, 0.7)
+  band.rotation.x = Math.PI / 2
+  const glow = makeGlowSprite(color, 2.8, 0.7)
+  const proxy = ghostSphere(1.15)
+  group.add(core, edges, band, glow, proxy)
   return { group, proxy, glow, kind }
 }

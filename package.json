@@ -11,6 +11,8 @@
     "playtest": "node tools/playtest.mjs"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
     "vitest": "4.1.9"
   }
 }

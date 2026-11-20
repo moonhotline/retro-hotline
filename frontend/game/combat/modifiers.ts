@@ -2,7 +2,20 @@ import type { Vector3 } from 'three'
 import type { Enemy } from '../waves'
 import type { WeaponId } from '../types'
 
-export type HackId = 'freeze' | 'burn' | 'attack_speed' | 'max_hp' | 'move_speed'
+export type HackId =
+  | 'freeze'
+  | 'burn'
+  | 'attack_speed'
+  | 'max_hp'
+  | 'move_speed'
+  | 'prism_ricochet'
+  | 'chain_arc'
+  | 'parry_overclock'
+  | 'slam_quake'
+  | 'chrono_focus'
+  | 'cryo_shatter'
+  | 'vamp_surge'
+
 export type HackTier = 'COMMON' | 'RARE' | 'OVERCLOCK'
 
 export interface NeonHack {
@@ -55,6 +68,62 @@ export const NEON_HACKS: readonly NeonHack[] = [
     tagline: 'KINETIC OVERDRIVE.',
     description: '永久提升 30% 基础移动与冲刺速度，增强战术机动与规避。',
   },
+  {
+    id: 'prism_ricochet',
+    name: '折射棱镜 // Prism Ricochet',
+    tier: 'RARE',
+    badge: 'PR',
+    tagline: 'OPTICAL CHAIN FIRE.',
+    description: '命中的弹道自动向 14 米内最近敌机折射跳弹，造成 65% 破盾伤害。',
+  },
+  {
+    id: 'chain_arc',
+    name: '电弧处决 // Arc Cascade',
+    tier: 'OVERCLOCK',
+    badge: 'AC',
+    tagline: 'HIGH-VOLTAGE SHATTER.',
+    description: '霓虹处决释放高压连锁闪电，重创周围最多 3 架敌机（50% 最大生命）并刷新冲刺。',
+  },
+  {
+    id: 'parry_overclock',
+    name: '弹反超载 // Parry Overclock',
+    tier: 'RARE',
+    badge: 'PO',
+    tagline: 'TURN FIRE INTO FURY.',
+    description: '脉冲弹反成功后立即装满当前弹匣，并激活 3.5 秒武器过载。',
+  },
+  {
+    id: 'slam_quake',
+    name: '地震震荡 // Seismic Slam',
+    tier: 'RARE',
+    badge: 'SQ',
+    tagline: 'AIRBORNE SHOCKWAVE.',
+    description: '动能震地冲击半径扩大至 18 米，并强制使范围内所有存活敌机失衡。',
+  },
+  {
+    id: 'chrono_focus',
+    name: '时序聚焦 // Chrono Focus',
+    tier: 'OVERCLOCK',
+    badge: 'CH',
+    tagline: 'STRIKE BETWEEN SECONDS.',
+    description: '处于时间膨胀状态开火时伤害提升 70%，完美放大停顿瞄准收益。',
+  },
+  {
+    id: 'cryo_shatter',
+    name: '寒霜碎裂 // Cryo Shatter',
+    tier: 'OVERCLOCK',
+    badge: 'CS',
+    tagline: 'FROZEN DETONATION.',
+    description: '击杀被冻结目标触发范围碎冰爆裂，对 9 米内敌机造成高额破盾伤害。',
+  },
+  {
+    id: 'vamp_surge',
+    name: '虹吸脉冲 // Siphon Pulse',
+    tier: 'COMMON',
+    badge: 'SP',
+    tagline: 'MOMENTUM SUSTAIN.',
+    description: '连击达到 ×3 及以上时，每次击杀立即恢复 6 点生命值。',
+  },
 ]
 
 export interface HitSource {
@@ -84,6 +153,11 @@ export interface GloryKillContext extends MomentumContext {
 export interface SlamContext {
   radius: number
   staggerAll: boolean
+}
+
+export interface ParryContext {
+  refillMagazine(): void
+  grantOvercharge?(seconds: number): void
 }
 
 /** Run-scoped build state. Hooks use explicit callbacks so combat still owns kills and FX. */
@@ -134,27 +208,85 @@ export class HackManager {
     return this.has('max_hp') ? 50 : 0
   }
 
+  chronoDamageMultiplier(chronoTimeScale: number): number {
+    return this.has('chrono_focus') && chronoTimeScale < 0.65 ? 1.7 : 1
+  }
+
+  killHealAmount(mult: number): number {
+    return this.has('vamp_surge') && mult >= 3 ? 6 : 0
+  }
+
   gloryKillRange(baseRange = 7): number {
-    return baseRange
+    return this.has('chain_arc') ? baseRange + 1.5 : baseRange
   }
 
   ammoCost(_weapon: WeaponId): number {
     return 1
   }
 
-  onHit(target: Enemy | null, _damage: number, _source: HitSource, _context: HitContext): void {
-    if (!target || target.hp <= 0) return
-    if (this.has('freeze')) {
-      target.frozenTimer = Math.max(target.frozenTimer ?? 0, 2.5)
+  onHit(target: Enemy | null, damage: number, source: HitSource, context: HitContext): void {
+    if (target && target.hp > 0) {
+      if (this.has('freeze')) {
+        target.frozenTimer = Math.max(target.frozenTimer ?? 0, 2.5)
+      }
+      if (this.has('burn')) {
+        target.burnTimer = Math.max(target.burnTimer ?? 0, 3.0)
+      }
     }
-    if (this.has('burn')) {
-      target.burnTimer = Math.max(target.burnTimer ?? 0, 3.0)
+
+    // Prism Ricochet: bounce once to the nearest clear hostile within 14m.
+    if (source.kind === 'bullet' && this.has('prism_ricochet')) {
+      let nearest: Enemy | null = null
+      let bestDistSq = 14 * 14
+      for (const candidate of context.enemies) {
+        if (candidate === target || candidate.hp <= 0) continue
+        const pos = candidate.parts.group.position
+        const d2 = pos.distanceToSquared(source.position)
+        if (d2 < bestDistSq && context.canHit(source.position, pos)) {
+          bestDistSq = d2
+          nearest = candidate
+        }
+      }
+      if (nearest) {
+        const bounceDmg = Math.max(1, damage * 0.65)
+        context.arc?.(source.position, nearest.parts.group.position)
+        context.damageEnemy(nearest, bounceDmg, true)
+      }
     }
   }
 
-  onGloryKill(_target: Enemy | Vector3, context: GloryKillContext): { chainedEnemies: Enemy[] } {
+  onFrozenKill(origin: Vector3, context: HitContext): number {
+    if (!this.has('cryo_shatter')) return 0
+    let hitCount = 0
+    for (const candidate of [...context.enemies]) {
+      if (candidate.hp <= 0) continue
+      const pos = candidate.parts.group.position
+      if (pos.distanceToSquared(origin) > 9 * 9) continue
+      candidate.frozenTimer = Math.max(candidate.frozenTimer ?? 0, 2.0)
+      context.arc?.(origin, pos)
+      context.damageEnemy(candidate, 5.5, true)
+      hitCount++
+    }
+    return hitCount
+  }
+
+  onGloryKill(target: Enemy | Vector3, context: GloryKillContext): { chainedEnemies: Enemy[] } {
     this.onDashKill(context)
-    return { chainedEnemies: [] }
+    const chainedEnemies: Enemy[] = []
+    if (!this.has('chain_arc')) return { chainedEnemies }
+
+    const origin = 'parts' in target ? target.parts.group.position : target
+    const nearby = context.enemies
+      .filter((enemy) => enemy !== target && enemy.hp > 0 && enemy.parts.group.position.distanceToSquared(origin) <= 16 * 16)
+      .sort((a, b) => a.parts.group.position.distanceToSquared(origin) - b.parts.group.position.distanceToSquared(origin))
+      .slice(0, 3)
+
+    for (const enemy of nearby) {
+      context.arc?.(origin, enemy.parts.group.position)
+      context.damageEnemy(enemy, Math.max(2, context.maxHp(enemy) * 0.5), true)
+      chainedEnemies.push(enemy)
+    }
+    return { chainedEnemies }
   }
 
   onDashKill(context: MomentumContext): void {
@@ -162,7 +294,15 @@ export class HackManager {
     this.speedBoostRemaining = 2
   }
 
-  onParry(_context: { refillMagazine(): void }): void {}
+  onParry(context: ParryContext): void {
+    if (!this.has('parry_overclock')) return
+    context.refillMagazine()
+    context.grantOvercharge?.(3.5)
+  }
 
-  onSlam(_context: SlamContext): void {}
+  onSlam(context: SlamContext): void {
+    if (!this.has('slam_quake')) return
+    context.radius = 18
+    context.staggerAll = true
+  }
 }

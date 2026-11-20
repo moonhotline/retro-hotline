@@ -194,23 +194,77 @@ describe('full-auto rifle and dedicated controls', () => {
     expect(engine.stats().ammo.deagle).toBe(6)
   })
 
-  it('ignores V and G keys after mapping removal and preserves C for slide', () => {
+  it('binds V to Pulse Parry, airborne C/G to Kinetic Slam, and grounded C to Slide', () => {
     const parry = vi.spyOn(engine['abilities'], 'tryPulseParry')
     const slam = vi.spyOn(engine['abilities'], 'tryKineticSlam')
     key('KeyC')
     expect(engine['slideT']).toBeGreaterThan(0)
+    expect(slam).not.toHaveBeenCalled()
+
     engine['grounded'] = false
     engine.playerPos().y += 10
     key('KeyC')
-    for (const button of [0, 1, 2, 3, 4]) {
-      document.dispatchEvent(new MouseEvent('mousedown', { button }))
-      document.dispatchEvent(new MouseEvent('mouseup', { button }))
-    }
-    expect(engine['punchCd']).toBeGreaterThan(0)
+    expect(slam).toHaveBeenCalledTimes(1)
+
     key('KeyV')
-    expect(parry).not.toHaveBeenCalled()
+    expect(parry).toHaveBeenCalledTimes(1)
+
+    engine['abilities'].reset()
+    engine['grounded'] = false
+    engine.playerPos().y += 10
     key('KeyG')
-    expect(slam).not.toHaveBeenCalled()
+    expect(slam).toHaveBeenCalledTimes(2)
+  })
+
+  it('supports Prism Scattergun 6-ray burst and Gauss Sniper multi-enemy piercing', () => {
+    key('Digit3')
+    expect(engine.stats().weapon).toBe('prism')
+    const e1 = target(6, false)
+    e1.hp = 30
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    tick(1 / 60)
+    expect(engine.stats().ammo.prism).toBe(WEAPONS.prism.mag - 1)
+    expect(e1.hp).toBeLessThan(30)
+    expect(engine['tracers'].length).toBe(0)
+
+    // Unlock and test Gauss Sniper piercing through two lined-up enemies
+    engine.unlockedWeapons.push('sniper')
+    engine['swapT'] = 0
+    key('Digit4')
+    expect(engine.stats().weapon).toBe('sniper')
+    engine['director'].clearEnemies()
+    const front = target(8, false)
+    const back = target(18, false)
+    front.hp = 10
+    back.hp = 10
+    engine['fireCd'] = 0
+    engine['recoil'] = 0
+    engine['shakeAmt'] = 0
+    engine.scene.updateMatrixWorld(true)
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    tick(1 / 60)
+    expect(front.hp).toBeLessThanOrEqual(0)
+    expect(back.hp).toBeLessThanOrEqual(0)
+  })
+
+  it('tracks multi-phase boss HUD transitions and advances chapters after boss wave clear', () => {
+    const boss = engine['director'].spawnEnemy('boss')
+    boss.parts.group.position.copy(engine.playerPos()).add(new THREE.Vector3(0, 0, -20))
+    expect(engine['director'].activeBossHud()?.phase).toBe(1)
+
+    engine['director'].damageEnemy(boss, 24, true)
+    expect(engine['director'].activeBossHud()?.phase).toBe(2)
+
+    engine['director'].damageEnemy(boss, 22, true)
+    expect(engine['director'].activeBossHud()?.phase).toBe(3)
+
+    // Clearing wave 4 (boss wave) advances Chapter 01 -> Chapter 02
+    engine['director'].wave = 4
+    expect(engine.levelManager.currentStage.chapter).toBe(1)
+    engine['director'].damageEnemy(boss, 999, true)
+    expect(engine.levelManager.currentStage.chapter).toBe(2)
   })
 
   it('performs wall climb when airborne near a wall and pressing Space', () => {
