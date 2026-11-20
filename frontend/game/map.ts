@@ -383,7 +383,9 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
     // Campus edge barriers, with the south approach left open.
     addWall(side * 40, 530, 0.4, 300, 1.4, 0x00f0ff)
   }
-  addWall(0, 680, 80, 0.4, 1.4, 0x39ff14)
+  // Open 36m highway portal at z=680 connecting Silicon Valley into Sector 02 (Times Square)
+  addWall(-29, 680, 22, 0.4, 1.4, 0x39ff14)
+  addWall(29, 680, 22, 0.4, 1.4, 0x39ff14)
 
   // Suspended vault: collision slab, traversable underside, open entry/exit.
   const vaultDeck = ghostBox(36, 0.6, 80)
@@ -517,8 +519,9 @@ export function buildZones(scene: THREE.Scene, collidables: THREE.Object3D[]): Z
   }
   for (let i = 0; i < 14; i++) {
     const h = 24 + Math.random() * 68
+    const side = i % 2 === 0 ? -1 : 1
     const b = new THREE.Mesh(new THREE.BoxGeometry(12 + Math.random() * 14, h, 12 + Math.random() * 12), skyTowerMat)
-    b.position.set(-100 + Math.random() * 200, h / 2 - 4, 725 + Math.random() * 110)
+    b.position.set(side * (66 + Math.random() * 64), h / 2 - 4, 725 + Math.random() * 110)
     scene.add(b)
   }
 

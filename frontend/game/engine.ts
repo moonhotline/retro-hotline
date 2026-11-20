@@ -208,6 +208,7 @@ export class GameEngine implements CombatHost {
   // Debug / telemetry (used by tools/playtest.mjs for evidence-based checks)
   private frameTimes: number[] = []
   private godMode = false
+  private lastSectorId = 'golden-gate'
 
   constructor(container: HTMLElement, onHud: (s: HudState) => void) {
     this.container = container
@@ -380,7 +381,30 @@ export class GameEngine implements CombatHost {
         this.timescale = s
       },
       hurt: (n: number) => this.damagePlayer(n),
+      warpToSector: (index: number) => this.warpToSector(index),
     }
+  }
+
+  /** Instant landmark traversal across the 5-Sector Open World (0=Golden Gate .. 4=Apple Park). */
+  warpToSector(index: number) {
+    const waypoints: ReadonlyArray<readonly [number, number, number, number]> = [
+      [0, 2.4, 180, Math.PI], // 01 Golden Gate Bridge (looking north toward tower & corridor)
+      [0, 2.4, 900, Math.PI], // 02 Times Square
+      [-10, 2.4, 1640, Math.PI * 0.85], // 03 Las Vegas Sphere
+      [0, 2.4, 2320, Math.PI], // 04 Googleplex Mountain View
+      [0, 2.4, 3090, Math.PI], // 05 Apple Park Spaceship
+    ]
+    const wp = waypoints[THREE.MathUtils.clamp(Math.floor(index), 0, waypoints.length - 1)]!
+    this.pos.set(wp[0], wp[1], wp[2])
+    this.lastSafe.copy(this.pos)
+    this.yaw = wp[3]
+    this.pitch = 0
+    this.vy = 0
+    this.grounded = true
+    this.env.update(this.gameplayTime, this.pos.z)
+    this.camera.position.copy(this.pos)
+    this.camera.rotation.set(this.pitch, this.yaw, 0)
+    this.emit(true)
   }
 
   // ---------- public API ----------
@@ -1403,7 +1427,19 @@ export class GameEngine implements CombatHost {
     if (z < -284) return 'SOUTH PLAZA // NEON ARCADE'
     if (z <= 284) return 'BAY BRIDGE // TRANSIT SPAN'
     if (z <= 400) return 'NORTH GATE // LOGISTICS HUB'
-    return 'SILICON VALLEY // QUANTUM CAMPUS'
+    if (z <= 680) return 'SILICON VALLEY // QUANTUM CAMPUS'
+    if (z <= 1380) return 'SECTOR 02 // NEW YORK TIMES SQUARE'
+    if (z <= 2080) return 'SECTOR 03 // LAS VEGAS SPHERE'
+    if (z <= 2760) return 'SECTOR 04 // GOOGLEPLEX MOUNTAIN VIEW'
+    return 'SECTOR 05 // APPLE PARK SPACESHIP'
+  }
+
+  private sectorIdForZ(z: number): string {
+    if (z <= 680) return 'golden-gate'
+    if (z <= 1380) return 'times-square'
+    if (z <= 2080) return 'vegas-sphere'
+    if (z <= 2760) return 'googleplex'
+    return 'apple-park'
   }
 
   private currentMult(): number {
@@ -1501,6 +1537,7 @@ export class GameEngine implements CombatHost {
     this.keys.clear()
     this.pos.set(0, 2.4, 180)
     this.lastSafe.copy(this.pos)
+    this.lastSectorId = 'golden-gate'
     this.camera.fov = 75
     this.camera.updateProjectionMatrix()
     this.setBanner('STAY SHARP')
@@ -1624,9 +1661,23 @@ export class GameEngine implements CombatHost {
     // Directional campus pads carry the player to the vault. Air steering still works.
     if (dashing || this.abilities.isSlamming) this.launchVelocity.set(0, 0, 0)
     if (!this.grounded && !dashing) this.pos.addScaledVector(this.launchVelocity, dt)
-    // Soft world bounds
-    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -60, 60)
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 700)
+    // Soft world bounds across the 3,600m 5-Landmark Open World Corridor
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -112, 112)
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -400, 3540)
+
+    const currentSector = this.sectorIdForZ(this.pos.z)
+    if (currentSector !== this.lastSectorId) {
+      this.lastSectorId = currentSector
+      const labels: Record<string, string> = {
+        'golden-gate': 'SECTOR 01 // GOLDEN GATE BRIDGE',
+        'times-square': 'SECTOR 02 // NEW YORK TIMES SQUARE',
+        'vegas-sphere': 'SECTOR 03 // LAS VEGAS SPHERE',
+        googleplex: 'SECTOR 04 // GOOGLEPLEX MOUNTAIN VIEW',
+        'apple-park': 'SECTOR 05 // APPLE PARK SPACESHIP',
+      }
+      this.setBanner(labels[currentSector] ?? 'OPEN CORRIDOR')
+      this.sfx.streak()
+    }
 
     // Wall collision (only against walls taller than the player)
     resolveWalls(this.env.walls, this.pos, 0.55, this.pos.y - EYE_OFFSET)
@@ -1979,7 +2030,7 @@ export class GameEngine implements CombatHost {
     if (this.frameTimes.length > 120) this.frameTimes.shift()
     const dt = Math.min(rawDelta, 0.05)
     const t = this.status === 'menu' ? this.clock.elapsedTime : this.gameplayTime
-    if (this.draftHacks.length === 0) this.env.update(t)
+    if (this.draftHacks.length === 0) this.env.update(t, this.pos.z)
 
     // Continuous music: intensity follows game state (muffled ↔ full lead)
     const desired =
