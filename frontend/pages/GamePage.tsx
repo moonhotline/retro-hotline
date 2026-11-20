@@ -48,8 +48,6 @@ const INITIAL_HUD: HudState = {
 
 const ABILITY_INFO: { id: keyof AbilityStates; key: string; label: string }[] = [
   { id: 'phaseDash', key: 'SHIFT', label: 'PHASE DASH' },
-  { id: 'pulseParry', key: 'V', label: 'PULSE PARRY' },
-  { id: 'kineticSlam', key: 'AIR C', label: 'KINETIC SLAM' },
 ]
 
 const WEAPON_INFO: Record<WeaponId, string> = {
@@ -344,15 +342,6 @@ export function Hud({ hud }: { hud: HudState }) {
             }}
           />
         </div>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="font-tech text-[10px] uppercase tracking-widest text-white/40">SLIDE C</span>
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-            <div
-              className={`h-full rounded-full transition-[width] duration-100 ${hud.slideFrac >= 1 ? 'bg-[#00f0ff]' : 'bg-white/40'}`}
-              style={{ width: `${Math.max(hud.slideFrac, 0.06) * 100}%` }}
-            />
-          </div>
-        </div>
       </div>
 
       {/* weapon + ammo */}
@@ -403,7 +392,7 @@ export function Hud({ hud }: { hud: HudState }) {
           </div>
         )}
         <div className="font-tech text-[10px] uppercase tracking-widest text-white/35">
-          Q / 1-4 SWAP · V PARRY · F HACK · E GLORY KILL
+          Q / 1-4 SWAP · F HACK · E GLORY KILL
         </div>
       </div>
     </div>

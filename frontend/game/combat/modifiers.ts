@@ -10,8 +10,8 @@ export type HackId =
   | 'move_speed'
   | 'prism_ricochet'
   | 'chain_arc'
-  | 'parry_overclock'
-  | 'slam_quake'
+  | 'dash_nova'
+  | 'overclock_core'
   | 'chrono_focus'
   | 'cryo_shatter'
   | 'vamp_surge'
@@ -85,20 +85,20 @@ export const NEON_HACKS: readonly NeonHack[] = [
     description: '霓虹处决释放高压连锁闪电，重创周围最多 3 架敌机（50% 最大生命）并刷新冲刺。',
   },
   {
-    id: 'parry_overclock',
-    name: '弹反超载 // Parry Overclock',
+    id: 'dash_nova',
+    name: '相位冲击 // Dash Nova',
     tier: 'RARE',
-    badge: 'PO',
-    tagline: 'TURN FIRE INTO FURY.',
-    description: '脉冲弹反成功后立即装满当前弹匣，并激活 3.5 秒武器过载。',
+    badge: 'DN',
+    tagline: 'KINETIC PHASE BURST.',
+    description: '相位冲刺结束时释放 11 米范围冲击波，破盾打击并震慑周围敌机。',
   },
   {
-    id: 'slam_quake',
-    name: '地震震荡 // Seismic Slam',
+    id: 'overclock_core',
+    name: '超频核心 // Overclock Core',
     tier: 'RARE',
-    badge: 'SQ',
-    tagline: 'AIRBORNE SHOCKWAVE.',
-    description: '动能震地冲击半径扩大至 18 米，并强制使范围内所有存活敌机失衡。',
+    badge: 'OC',
+    tagline: 'EXTENDED OVERDRIVE.',
+    description: '换弹速度永久加快 40%，霓虹处决额外延长 4 秒武器过载时间。',
   },
   {
     id: 'chrono_focus',
@@ -204,6 +204,18 @@ export class HackManager {
     return this.has('attack_speed') ? 0.65 : 1
   }
 
+  get reloadTimeMultiplier(): number {
+    return this.has('overclock_core') ? 0.6 : 1
+  }
+
+  get bonusOverchargeSeconds(): number {
+    return this.has('overclock_core') ? 4 : 0
+  }
+
+  get hasDashNova(): boolean {
+    return this.has('dash_nova')
+  }
+
   get maxHpBonus(): number {
     return this.has('max_hp') ? 50 : 0
   }
@@ -294,15 +306,7 @@ export class HackManager {
     this.speedBoostRemaining = 2
   }
 
-  onParry(context: ParryContext): void {
-    if (!this.has('parry_overclock')) return
-    context.refillMagazine()
-    context.grantOvercharge?.(3.5)
-  }
+  onParry(_context: ParryContext): void {}
 
-  onSlam(context: SlamContext): void {
-    if (!this.has('slam_quake')) return
-    context.radius = 18
-    context.staggerAll = true
-  }
+  onSlam(_context: SlamContext): void {}
 }

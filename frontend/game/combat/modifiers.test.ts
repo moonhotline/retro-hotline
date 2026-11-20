@@ -35,8 +35,8 @@ describe('HackManager build and draft', () => {
       ['move_speed', 'COMMON'],
       ['prism_ricochet', 'RARE'],
       ['chain_arc', 'OVERCLOCK'],
-      ['parry_overclock', 'RARE'],
-      ['slam_quake', 'RARE'],
+      ['dash_nova', 'RARE'],
+      ['overclock_core', 'RARE'],
       ['chrono_focus', 'OVERCLOCK'],
       ['cryo_shatter', 'OVERCLOCK'],
       ['vamp_surge', 'COMMON'],
@@ -189,7 +189,7 @@ describe('stat modifiers: attack speed, max HP, move speed', () => {
     expect(context.arc).toHaveBeenCalledTimes(2)
   })
 
-  it('activates prism ricochet, parry overclock, slam quake, chrono focus, cryo shatter and vamp surge', () => {
+  it('activates prism ricochet, dash nova, overclock core, chrono focus, cryo shatter and vamp surge', () => {
     const manager = new HackManager()
     const primary = enemy(0)
     const nearby = enemy(8)
@@ -200,17 +200,15 @@ describe('stat modifiers: attack speed, max HP, move speed', () => {
     expect(ctx.damageEnemy).toHaveBeenCalledWith(nearby, 6.5, true)
     expect(ctx.arc).toHaveBeenCalledOnce()
 
-    manager.apply('parry_overclock')
-    const refillMagazine = vi.fn()
-    const grantOvercharge = vi.fn()
-    manager.onParry({ refillMagazine, grantOvercharge })
-    expect(refillMagazine).toHaveBeenCalledOnce()
-    expect(grantOvercharge).toHaveBeenCalledWith(3.5)
+    expect(manager.hasDashNova).toBe(false)
+    manager.apply('dash_nova')
+    expect(manager.hasDashNova).toBe(true)
 
-    manager.apply('slam_quake')
-    const slam = { radius: 12, staggerAll: false }
-    manager.onSlam(slam)
-    expect(slam).toEqual({ radius: 18, staggerAll: true })
+    expect(manager.reloadTimeMultiplier).toBe(1)
+    expect(manager.bonusOverchargeSeconds).toBe(0)
+    manager.apply('overclock_core')
+    expect(manager.reloadTimeMultiplier).toBe(0.6)
+    expect(manager.bonusOverchargeSeconds).toBe(4)
 
     manager.apply('chrono_focus')
     expect(manager.chronoDamageMultiplier(0.1)).toBe(1.7)

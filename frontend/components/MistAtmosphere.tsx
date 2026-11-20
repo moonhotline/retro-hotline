@@ -529,7 +529,7 @@ export function MistAtmosphere({ bpm = 125, variant = 'standby', energyBoost = f
     const draw = () => {
       driftX += (pointerX - driftX) * 0.08
       driftY += (pointerY - driftY) * 0.08
-      const intensity = variantRef.current === 'dashboard' ? 0.56 : variantRef.current === 'pause' ? 0.90 : 1.06
+      const intensity = variantRef.current === 'dashboard' ? 0.88 : variantRef.current === 'pause' ? 0.90 : 1.06
 
       if (gl && program) {
         gl.viewport(0, 0, canvas.width, canvas.height)
