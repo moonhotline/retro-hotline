@@ -1,12 +1,13 @@
 import * as THREE from 'three'
 import { makeGlowSprite, skyscraperWindowTexture, solidEdgeBox } from './effects'
 import { buildZones, type BoostStrip, type HazardSpot, type Wall, type WalkRect, type Zones } from './map'
+import { buildInterconnectedWorld, type VehicleSpawnPoint, type WorldSector } from './world/SectorStreamer'
 import type { EnvironmentTheme } from './levels/types'
 
-export type { BoostStrip, HazardSpot, Wall, WalkRect }
+export type { BoostStrip, HazardSpot, Wall, WalkRect, VehicleSpawnPoint, WorldSector }
 
 export interface Environment {
-  update: (elapsed: number) => void
+  update: (elapsed: number, playerZ?: number) => void
   applyStageTheme?: (config: EnvironmentTheme) => void
   setComboIntensity?: (mult: number) => void
   collidables: THREE.Object3D[]
@@ -15,6 +16,8 @@ export interface Environment {
   pads: Zones['pads']
   boostStrips?: BoostStrip[]
   hazardSpots?: HazardSpot[]
+  vehicleSpawns?: VehicleSpawnPoint[]
+  sectors?: WorldSector[]
   randomSpawnPoint: (playerPos: THREE.Vector3) => THREE.Vector3
 }
 
@@ -83,14 +86,14 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
   const fog = new THREE.FogExp2(FOG_COLOR, 0.0019)
   scene.fog = fog
 
-  // --- Nocturnal Twilight Bay Sky Dome (cinematic gradient, soft sunset halo, crisp stars) ---
+  // --- Nocturnal Twilight Bay Sky Dome (GTA 6 Vice City coral-gold sunset + deep cyber twilight + crisp stars) ---
   const domeUniforms = {
     uTime: { value: 0 },
-    uSkyTop: { value: new THREE.Color(0x040814) },
-    uSkyMid: { value: new THREE.Color(0x0e1a34) },
-    uSkyHorizon: { value: new THREE.Color(0x231a3a) },
-    uGlowColor: { value: new THREE.Color(0xd94e7a) },
-    uSunColor: { value: new THREE.Color(0xffb385) },
+    uSkyTop: { value: new THREE.Color(0x060a1c) },
+    uSkyMid: { value: new THREE.Color(0x161c42) },
+    uSkyHorizon: { value: new THREE.Color(0x3a1946) },
+    uGlowColor: { value: new THREE.Color(0xff3b82) },
+    uSunColor: { value: new THREE.Color(0xff9e62) },
     uComboGlow: { value: 0 },
   }
   const dome = new THREE.Mesh(
@@ -320,10 +323,16 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     scene.add(segmentsGeom(postPairs, 0x3b5878, 0.75))
   }
 
-  // --- Sculpted Steel Suspension Towers + Recessed Architectural Lighting + Searchlights ---
+  // --- Iconic Golden Gate International Orange Art Deco Stepped Twin Towers + Searchlights ---
   const searchlights: Array<{ mesh: THREE.Mesh; baseRot: number; speed: number }> = []
-  const towerMetal = new THREE.MeshStandardMaterial({ color: STEEL_MID, metalness: 0.74, roughness: 0.36 })
-  const towerAccentMat = new THREE.MeshBasicMaterial({ color: CYAN })
+  const goldenGateOrange = new THREE.MeshStandardMaterial({
+    color: 0xd9462b,
+    metalness: 0.48,
+    roughness: 0.34,
+    emissive: 0x45110a,
+    emissiveIntensity: 0.32,
+  })
+  const towerAccentMat = new THREE.MeshBasicMaterial({ color: 0xff8a5b })
   for (const tz of [-TOWER_Z, TOWER_Z]) {
     for (const x of [-6.2, 6.2]) {
       const ghost = ghostBox(1.8, 92, 1.8)
@@ -333,18 +342,28 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     }
 
     const g = new THREE.Group()
+    g.name = tz < 0 ? 'golden-gate-south-tower' : 'golden-gate-north-tower'
     for (const x of [-6.2, 6.2]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(1.9, 92, 2.2), towerMetal)
-      leg.position.set(x, 46, 0)
-      g.add(leg)
-      // Thin vertical architectural LED strip along inner tower column
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 84, 0.16), towerAccentMat)
-      strip.position.set(x > 0 ? x - 0.98 : x + 0.98, 45, 0)
+      // Art Deco 3-tier stepped tapered tower leg silhouette
+      const baseLeg = new THREE.Mesh(new THREE.BoxGeometry(2.4, 34, 2.8), goldenGateOrange)
+      baseLeg.position.set(x, 17, 0)
+      g.add(baseLeg)
+      const midLeg = new THREE.Mesh(new THREE.BoxGeometry(2.0, 32, 2.3), goldenGateOrange)
+      midLeg.position.set(x, 50, 0)
+      g.add(midLeg)
+      const topLeg = new THREE.Mesh(new THREE.BoxGeometry(1.6, 26, 1.8), goldenGateOrange)
+      topLeg.position.set(x, 79, 0)
+      g.add(topLeg)
+      // Thin vertical architectural warm coral-gold uplight strip along inner tower column
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 86, 0.16), towerAccentMat)
+      strip.position.set(x > 0 ? x - 1.05 : x + 1.05, 45, 0)
       g.add(strip)
     }
-    const levels = [10, 25, 40, 56, 72, 86]
-    for (const y of levels) {
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(13.2, 1.5, 1.6), towerMetal)
+    const levels = [12, 28, 45, 62, 78, 89]
+    for (let li = 0; li < levels.length; li++) {
+      const y = levels[li]!
+      const strutH = li === levels.length - 1 ? 2.4 : 1.7
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(13.6, strutH, 1.8), goldenGateOrange)
       strut.position.set(0, y, 0)
       g.add(strut)
     }
@@ -355,10 +374,10 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
       bracePairs.push(-6, y0, 0, 6, y1, 0)
       bracePairs.push(6, y0, 0, -6, y1, 0)
     }
-    g.add(segmentsGeom(bracePairs, 0x3b5c82, 0.65))
+    g.add(segmentsGeom(bracePairs, 0xe86b4c, 0.62))
 
-    const beacon = makeGlowSprite(0xff4264, 5.5, 0.85)
-    beacon.position.set(0, 92.8, 0)
+    const beacon = makeGlowSprite(0xff5238, 6.5, 0.9)
+    beacon.position.set(0, 93.2, 0)
     g.add(beacon)
 
     // Soft atmospheric volumetric searchlight cone
@@ -556,14 +575,47 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     scene.add(spireCrown)
   }
 
-  // --- Multi-zone map (plaza, arcade, pool courtyard, warehouse roof, Silicon Valley vault) ---
+  // --- Multi-zone map (Golden Gate Bridge + Plaza + Silicon Valley) + 5-Landmark Open World Corridor ---
   const zones: Zones = buildZones(scene, collidables)
+  const world = buildInterconnectedWorld(scene, collidables)
+  const allWalls: Wall[] = [...zones.walls, ...world.walls]
+  const allWalkRects: WalkRect[] = [...zones.walkRects, ...world.walkRects]
+  const allBoostStrips: BoostStrip[] = [...zones.boostStrips, ...world.boostStrips]
+  const allHazardSpots: HazardSpot[] = [...zones.hazardSpots, ...world.hazardSpots]
+
+  const randomSpawnPoint = (playerPos: THREE.Vector3): THREE.Vector3 => {
+    if (playerPos.z <= 670) return zones.randomSpawnPoint(playerPos)
+    const candidates: THREE.Vector3[] = []
+    for (const r of allWalkRects) {
+      if (r.z1 < playerPos.z - 120 || r.z0 > playerPos.z + 120) continue
+      for (let k = 0; k < 4; k++) {
+        const x = r.x0 + 3 + Math.random() * Math.max(r.x1 - r.x0 - 6, 1)
+        const z = r.z0 + 3 + Math.random() * Math.max(r.z1 - r.z0 - 6, 1)
+        const y = r.top + 2.4 + Math.random() * 8
+        const p = new THREE.Vector3(x, y, z)
+        const d = p.distanceTo(playerPos)
+        if (d > 26 && d < 95) candidates.push(p)
+      }
+    }
+    if (candidates.length > 0) {
+      return candidates[Math.floor(Math.random() * candidates.length)]!
+    }
+    return new THREE.Vector3(
+      THREE.MathUtils.clamp(playerPos.x + (Math.random() - 0.5) * 28, -42, 42),
+      Math.max(4, playerPos.y + 2),
+      THREE.MathUtils.clamp(playerPos.z + 42, -378, 3460)
+    )
+  }
+
   let lastElapsed = 0
+  let comboGlow = 0
 
   return {
-    update(elapsed: number) {
+    update(elapsed: number, playerZ = 0) {
       const dt = Math.min(Math.max(elapsed - lastElapsed, 0), 0.1)
       lastElapsed = elapsed
+      dome.position.z = playerZ
+      water.position.z = playerZ
       domeUniforms.uTime.value = elapsed
       waterUniforms.uTime.value = elapsed
       roadUniforms.uTime.value = elapsed
@@ -579,17 +631,18 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
         }
       }
       zones.update(elapsed)
+      world.update(elapsed, playerZ, comboGlow)
     },
     applyStageTheme(config: EnvironmentTheme) {
       // Blend chapter palette cleanly into the neo-noir nocturnal lighting rig
       fog.color.setHex(config.fogColor).lerp(new THREE.Color(FOG_COLOR), 0.45)
-      fog.density = THREE.MathUtils.clamp(config.fogDensity * 1.05, 0.0014, 0.0032)
+      fog.density = THREE.MathUtils.clamp(config.fogDensity * 0.85, 0.0009, 0.0022)
       waterUniforms.fogColor.value.copy(fog.color)
       waterUniforms.fogDensity.value = fog.density
-      domeUniforms.uSkyTop.value.setHex(config.groundColor).lerp(new THREE.Color(0x040814), 0.5)
-      domeUniforms.uSkyHorizon.value.setHex(config.skyColor).lerp(new THREE.Color(0x1f1936), 0.4)
-      domeUniforms.uGlowColor.value.setHex(config.neonSecondary)
-      domeUniforms.uSunColor.value.setHex(config.neonPrimary).lerp(new THREE.Color(0xffc99e), 0.55)
+      domeUniforms.uSkyTop.value.setHex(config.groundColor).lerp(new THREE.Color(0x060a1c), 0.5)
+      domeUniforms.uSkyHorizon.value.setHex(config.skyColor).lerp(new THREE.Color(0x3a1946), 0.45)
+      domeUniforms.uGlowColor.value.setHex(config.neonSecondary).lerp(new THREE.Color(0xff3b82), 0.35)
+      domeUniforms.uSunColor.value.setHex(config.neonPrimary).lerp(new THREE.Color(0xff9e62), 0.55)
       waterUniforms.uAccentColor.value.setHex(config.neonPrimary).lerp(new THREE.Color(0x1f6e96), 0.55)
       waterUniforms.uStreakColor.value.setHex(config.neonSecondary).lerp(new THREE.Color(0xff9b85), 0.45)
       roadUniforms.uPrimary.value.setHex(config.neonPrimary)
@@ -601,15 +654,18 @@ export function buildEnvironment(scene: THREE.Scene): Environment {
     },
     setComboIntensity(mult: number) {
       const k = THREE.MathUtils.clamp((mult - 1) / 4, 0, 1)
+      comboGlow = k
       domeUniforms.uComboGlow.value = k
       roadUniforms.uComboGlow.value = k
     },
     collidables,
-    walls: zones.walls,
-    walkRects: zones.walkRects,
+    walls: allWalls,
+    walkRects: allWalkRects,
     pads: zones.pads,
-    boostStrips: zones.boostStrips,
-    hazardSpots: zones.hazardSpots,
-    randomSpawnPoint: zones.randomSpawnPoint,
+    boostStrips: allBoostStrips,
+    hazardSpots: allHazardSpots,
+    vehicleSpawns: world.vehicleSpawns,
+    sectors: world.sectors,
+    randomSpawnPoint,
   }
 }
