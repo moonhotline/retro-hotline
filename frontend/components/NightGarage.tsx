@@ -32,6 +32,7 @@ interface GarageStats {
 }
 
 const RIFLE_BASELINE_TRIS = 60
+const CAR_BASELINE_TRIS = 120
 
 export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: NightGarageProps) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -82,6 +83,7 @@ export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: N
     const w = host.clientWidth || 1280
     const h = host.clientHeight || 720
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+    renderer.info.autoReset = false
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
     renderer.setSize(w, h)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -143,6 +145,10 @@ export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: N
     const fillLight = new THREE.DirectionalLight(0x2ae4ff, 0.9)
     fillLight.position.set(-2.5, 1.4, 2.8)
     scene.add(fillLight)
+
+    const sideSoftbox = new THREE.DirectionalLight(0xd2e6ff, 1.35)
+    sideSoftbox.position.set(5.5, 2.8, 0.6)
+    scene.add(sideSoftbox)
 
     // Build industrial models
     const rifleRig: IndustrialRifleRig = buildIndustrialPulseRifle()
@@ -272,6 +278,7 @@ export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: N
       }
 
       controls.update()
+      renderer.info.reset()
       composer.render()
 
       if (now - lastTelemetry > 250) {
@@ -298,10 +305,36 @@ export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: N
       composer.setSize(nw, nh)
     }
     window.addEventListener('resize', onResize)
+    ;(window as unknown as { __garage?: unknown }).__garage = {
+      setModel: (m: GarageModelId) => selectModel(m),
+      setPreset: (p: GarageCameraPreset) => selectPreset(p),
+      setLighting: (l: GarageLightingMode) => setLighting(l),
+      setBloom: (on: boolean) => setBloomOn(on),
+      setHeadlights: (on: boolean) => setHeadlightsOn(on),
+      testFire: () => triggerTestFire(),
+      getStats: () => {
+        const sorted = [...frameTimes].sort((a, b) => a - b)
+        const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]! : 0
+        const showCar = stateRef.current.model === 'car' && Boolean(carRig)
+        return {
+          model: stateRef.current.model,
+          preset: stateRef.current.preset,
+          lighting: stateRef.current.lighting,
+          bloomOn: stateRef.current.bloomOn,
+          triangles: showCar && carStats ? carStats.triangles : rifleStats.triangles,
+          rifleTriangles: rifleStats.triangles,
+          carTriangles: carStats?.triangles ?? 0,
+          drawCalls: renderer.info.render.calls,
+          p95Ms: Math.round(p95 * 10) / 10,
+          webgl2,
+        }
+      },
+    }
     raf = requestAnimationFrame(render)
 
     return () => {
       cancelAnimationFrame(raf)
+      delete (window as unknown as { __garage?: unknown }).__garage
       window.removeEventListener('resize', onResize)
       controls.dispose()
       composer.dispose()
@@ -326,7 +359,7 @@ export function NightGarage({ onBack, initialModel = 'rifle', buildCarModel }: N
 
       <aside className="night-garage-telemetry" aria-label="Model Telemetry">
         <div><dt>TRIANGLES</dt><dd>{stats.triangles.toLocaleString()}</dd></div>
-        <div><dt>BEFORE</dt><dd>{RIFLE_BASELINE_TRIS} TRIS</dd></div>
+        <div><dt>BEFORE</dt><dd>{model === 'car' ? CAR_BASELINE_TRIS : RIFLE_BASELINE_TRIS} TRIS</dd></div>
         <div><dt>DRAW CALLS</dt><dd>{stats.drawCalls}</dd></div>
         <div><dt>P95 FRAME</dt><dd>{stats.p95Ms.toFixed(1)} ms</dd></div>
         <div><dt>RENDERER</dt><dd>{stats.webgl2 ? 'WEBGL 2' : 'WEBGL 1'}</dd></div>

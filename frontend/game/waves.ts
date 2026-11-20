@@ -701,10 +701,10 @@ export class WaveDirector {
     return q
   }
 
-  spawnEnemy(type: DroneType): Enemy {
+  spawnEnemy(type: DroneType, overridePos?: THREE.Vector3): Enemy {
     const st = DRONE_STATS[type]
     const parts = makeDrone(type)
-    const pos = this.host.spawnPoint()
+    const pos = overridePos ? overridePos.clone() : this.host.spawnPoint()
     const enemy: Enemy = {
       type,
       parts,

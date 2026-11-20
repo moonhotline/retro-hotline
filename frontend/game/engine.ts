@@ -25,6 +25,7 @@ import { AbilitySystem } from './combat/abilities'
 import { HackManager, type HackId, type NeonHack } from './combat/modifiers'
 import { loadProfile, recordGameRun, saveProfile } from './combat/storage'
 import { LevelManager } from './levels/manager'
+import { VehicleSystem } from './vehicle/VehicleSystem'
 import { Sfx } from './audio'
 import { SynthMusic } from './music'
 import type { DroneType, GameStatus, HudState, Popup, PopupKind, WeaponId } from './types'
@@ -101,6 +102,7 @@ export class GameEngine implements CombatHost {
   private director: WaveDirector
   private gloryKills: GloryKillSystem
   private abilities: AbilitySystem
+  private vehicles: VehicleSystem
   readonly hackManager = new HackManager()
   readonly levelManager = new LevelManager()
   chronoTimeScale = 1.0
@@ -209,6 +211,8 @@ export class GameEngine implements CombatHost {
   private frameTimes: number[] = []
   private godMode = false
   private lastSectorId = 'golden-gate'
+  private appleParkBossSpawned = false
+  private ramCooldowns = new WeakMap<Enemy, number>()
 
   constructor(container: HTMLElement, onHud: (s: HudState) => void) {
     this.container = container
@@ -249,6 +253,7 @@ export class GameEngine implements CombatHost {
     this.director = new WaveDirector(this)
     this.gloryKills = new GloryKillSystem(this.director, this)
     this.abilities = new AbilitySystem(this.director, this)
+    this.vehicles = new VehicleSystem(this.scene, this.env.vehicleSpawns ?? [])
     this.levelManager.bindScene(this.scene, this.sfx)
 
     window.addEventListener('resize', this.onResize)
@@ -382,6 +387,23 @@ export class GameEngine implements CombatHost {
       },
       hurt: (n: number) => this.damagePlayer(n),
       warpToSector: (index: number) => this.warpToSector(index),
+      enterNearestVehicle: () => {
+        const entered = this.vehicles.enterNearest(this.pos)
+        if (entered) {
+          this.setBanner('NEON GT COUPE // ENGAGED')
+          this.emit(true)
+        }
+        return Boolean(entered)
+      },
+      exitVehicle: () => {
+        const ex = this.vehicles.exitVehicle()
+        if (ex) {
+          this.pos.copy(ex.exitPos)
+          this.yaw = ex.yaw
+          this.emit(true)
+        }
+        return Boolean(ex)
+      },
     }
   }
 
@@ -541,6 +563,7 @@ export class GameEngine implements CombatHost {
     this.levelManager.dispose()
     this.abilities.reset()
     this.gloryKills.reset()
+    this.vehicles.dispose()
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh & { material?: THREE.Material | THREE.Material[] }
       if (mesh.geometry && !(obj instanceof THREE.Sprite)) mesh.geometry.dispose()
@@ -910,6 +933,21 @@ export class GameEngine implements CombatHost {
       if (chosen && chosen !== this.weapon) this.selectWeapon(chosen)
     }
     if (e.code === 'KeyE' && !e.repeat) {
+      if (this.vehicles.isDriving) {
+        const exited = this.vehicles.exitVehicle()
+        if (exited) {
+          this.pos.copy(exited.exitPos)
+          this.lastSafe.copy(exited.exitPos)
+          this.yaw = exited.yaw
+          this.pitch = 0
+          this.vy = 0
+          this.grounded = true
+          this.setBanner('ON FOOT // WEAPONS READY')
+          this.sfx.swap()
+          this.emit(true)
+          return
+        }
+      }
       if (this.levelManager.activeInteractable) {
         if (this.levelManager.interact()) {
           this.firing = false
@@ -921,6 +959,14 @@ export class GameEngine implements CombatHost {
           this.emit(true)
           return
         }
+      }
+      if (this.vehicles.enterNearest(this.pos)) {
+        this.isAiming = false
+        this.reloading = false
+        this.setBanner('NEON GT COUPE // ENGAGED')
+        this.sfx.whoosh()
+        this.emit(true)
+        return
       }
       this.tryGloryKill()
     }
@@ -1404,7 +1450,11 @@ export class GameEngine implements CombatHost {
       draftHacks: [...this.draftHacks],
       activeHacks: this.hackManager.list(),
       chronoTimeScale: this.chronoTimeScale,
-      interactPrompt: this.levelManager.activeInteractable?.promptLabel ?? null,
+      interactPrompt:
+        this.levelManager.activeInteractable?.promptLabel ??
+        (!this.vehicles.isDriving && this.vehicles.nearestEnterable(this.pos)
+          ? '[E] DRIVE NEON GT COUPE'
+          : null),
       stageName: this.levelManager.currentStage.name,
       chapter: this.levelManager.currentStage.chapter,
       roomName: this.levelManager.currentRoom?.roomName,
@@ -1414,6 +1464,7 @@ export class GameEngine implements CombatHost {
       pointerLocked: this.isLocked(),
       bossHud: this.director.activeBossHud(),
       waveProtocol: this.director.activeProtocol(),
+      vehicle: this.vehicles.hudState(),
     }
     const key = JSON.stringify(snap)
     if (force || key !== this.lastEmit) {
@@ -1456,6 +1507,8 @@ export class GameEngine implements CombatHost {
     this.gameplayTime = 0
     this.abilities.reset()
     this.gloryKills.reset()
+    this.vehicles.reset(this.env.vehicleSpawns ?? [])
+    this.appleParkBossSpawned = false
     this.director.reset()
     this.particles.clear()
     this.slideHits.clear()
@@ -1595,20 +1648,98 @@ export class GameEngine implements CombatHost {
     this.slideCd = Math.max(0, this.slideCd - dtRaw)
     if (this.overchargeT > 0) this.overchargeT -= dtRaw
 
-    // Chrono-Miami: Tactical time-dilation
+    // Chrono-Miami: Tactical time-dilation (always 1.0x when driving the Neon GT Coupe)
     const moving = (this.keys.has('KeyW') || this.keys.has('KeyS') || this.keys.has('KeyA') || this.keys.has('KeyD'))
-    const isPlayerActive = !this.chronoMode || moving || this.gloryKills.isDashing || this.abilities.isDashing || this.firing || this.triggerQueued || this.reloading || this.slideT > 0 || this.punchAnim > 0 || this.abilities.isSlamming || !this.grounded || this.levelManager.storyModal.open
+    const isPlayerActive = !this.chronoMode || this.vehicles.isDriving || moving || this.gloryKills.isDashing || this.abilities.isDashing || this.firing || this.triggerQueued || this.reloading || this.slideT > 0 || this.punchAnim > 0 || this.abilities.isSlamming || !this.grounded || this.levelManager.storyModal.open
     const targetChrono = isPlayerActive ? 1.0 : 0.05
     this.chronoTimeScale = THREE.MathUtils.damp(this.chronoTimeScale, targetChrono, 12, dtRaw)
     this.music.setTimeDilation(this.chronoTimeScale)
     const worldDt = dt * this.chronoTimeScale
 
-    // ---- movement ----
+    // ---- Vehicle Driving & Arcade Drift Physics ----
+    const vehicleRes = this.vehicles.update(
+      dt,
+      t,
+      this.pos,
+      {
+        throttle: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
+        steer: (this.keys.has('KeyA') ? 1 : 0) - (this.keys.has('KeyD') ? 1 : 0),
+        drift: this.keys.has('Space'),
+        nitrous: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+        fire: this.firing || this.triggerQueued,
+      },
+      this.env.walls,
+      (x, z, fy) => this.groundAt(x, z, fy),
+      (leftOrigin, rightOrigin, dir) => {
+        this.triggerQueued = false
+        this.sfx.shoot()
+        this.particles.burst(leftOrigin, SPARK_COLOR, 4, 4, 0.16)
+        this.particles.burst(rightOrigin, SPARK_COLOR, 4, 4, 0.16)
+        // Twin front pulse cannon ray hits along vehicle forward cone
+        for (const origin of [leftOrigin, rightOrigin]) {
+          this.raycaster.set(origin, dir)
+          this.raycaster.far = 160
+          for (const e of [...this.director.enemies]) {
+            const to = this.tmpA.subVectors(e.parts.group.position, origin)
+            const along = to.dot(dir)
+            if (along < 1 || along > 160) continue
+            const perpSq = to.lengthSq() - along * along
+            const hitR = e.radius + 1.35
+            if (perpSq <= hitR * hitR) {
+              this.director.damageEnemy(e, 3, false)
+              this.particles.burst(e.parts.group.position, SPARK_COLOR, 8, 6, 0.35)
+              this.hitMarkerId++
+              this.hitMarkerCrit = false
+              this.sfx.hit()
+              break
+            }
+          }
+        }
+      }
+    )
+
+    if (this.vehicles.isDriving && this.vehicles.active) {
+      const car = this.vehicles.active
+      this.pos.set(car.pos.x, car.pos.y + EYE_OFFSET, car.pos.z)
+      this.lastSafe.copy(this.pos)
+      this.grounded = true
+      this.vy = 0
+
+      // High-speed vehicular ramming
+      if (vehicleRes.ramOrigin && vehicleRes.ramDir) {
+        for (const e of [...this.director.enemies]) {
+          const lastRam = this.ramCooldowns.get(e) ?? -99
+          if (t - lastRam < 0.45) continue
+          if (e.parts.group.position.distanceTo(vehicleRes.ramOrigin) <= e.radius + 2.4) {
+            this.ramCooldowns.set(e, t)
+            const killed = this.director.damageEnemy(e, 10, true)
+            if (!killed) this.director.knockback(e, vehicleRes.ramDir, 12)
+            this.particles.burst(e.parts.group.position, SPARK_COLOR, 18, 10, 0.55)
+            this.shockwave(e.parts.group.position, 0x28e8ff, 5.5)
+            this.addShake(0.55)
+            this.hitstop(0.06, 0.06)
+            this.hitMarkerId++
+            this.hitMarkerCrit = true
+            this.sfx.hit()
+          }
+        }
+      }
+
+      if (vehicleRes.fovTarget !== null) {
+        this.camera.fov += (vehicleRes.fovTarget - this.camera.fov) * Math.min(1, dtRaw * 8)
+        this.camera.updateProjectionMatrix()
+      }
+      this.vehicles.applyChaseCamera(this.camera, dtRaw)
+    }
+
+    // ---- On-foot movement (skipped while inside Neon GT Coupe) ----
     const wasPhaseDashing = this.abilities.isDashing
     const dashing = this.gloryKills.isDashing || this.abilities.isDashing
-    this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
-    this.gloryKills.update(elapsed, t)
-    this.abilities.update(dtRaw, t)
+    if (!this.vehicles.isDriving) {
+      this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
+      this.gloryKills.update(elapsed, t)
+      this.abilities.update(dtRaw, t)
+    }
     if (wasPhaseDashing && !this.abilities.isDashing && this.hackManager.hasDashNova) {
       const origin = this.pos.clone()
       this.shockwave(origin, 0x29e3ff, 11)
@@ -1621,6 +1752,27 @@ export class GameEngine implements CombatHost {
     }
     if (this.draftHacks.length > 0) return
     const sprintKey = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
+    if (this.vehicles.isDriving) {
+      // Check sector transitions & Apple Park final Boss courtyard while driving
+      const currentSector = this.sectorIdForZ(this.pos.z)
+      if (currentSector !== this.lastSectorId) {
+        this.lastSectorId = currentSector
+        const labels: Record<string, string> = {
+          'golden-gate': 'SECTOR 01 // GOLDEN GATE BRIDGE',
+          'times-square': 'SECTOR 02 // NEW YORK TIMES SQUARE',
+          'vegas-sphere': 'SECTOR 03 // LAS VEGAS SPHERE',
+          googleplex: 'SECTOR 04 // GOOGLEPLEX MOUNTAIN VIEW',
+          'apple-park': 'SECTOR 05 // APPLE PARK SPACESHIP',
+        }
+        this.setBanner(labels[currentSector] ?? 'OPEN CORRIDOR')
+        this.sfx.streak()
+      }
+      if (this.pos.z >= 3120 && !this.appleParkBossSpawned && !this.director.activeBossHud()) {
+        this.appleParkBossSpawned = true
+        this.director.spawnEnemy('boss', new THREE.Vector3(0, 9, 3210))
+        this.setBanner('APPLE PARK // APEX SOVEREIGN')
+      }
+    } else {
     if (!dashing && this.slideT > 0) {
       this.slideT -= dtRaw
       const k = Math.max(this.slideT / SLIDE_TIME, 0.2)
@@ -1677,6 +1829,11 @@ export class GameEngine implements CombatHost {
       }
       this.setBanner(labels[currentSector] ?? 'OPEN CORRIDOR')
       this.sfx.streak()
+    }
+    if (this.pos.z >= 3120 && !this.appleParkBossSpawned && !this.director.activeBossHud()) {
+      this.appleParkBossSpawned = true
+      this.director.spawnEnemy('boss', new THREE.Vector3(0, 9, 3210))
+      this.setBanner('APPLE PARK // APEX SOVEREIGN')
     }
 
     // Wall collision (only against walls taller than the player)
@@ -1904,6 +2061,7 @@ export class GameEngine implements CombatHost {
         this.triggerQueued = false
       }
     }
+    } // end on-foot movement & weapon pose
 
     // Waves / enemies
     if (this.draftHacks.length > 0) return
@@ -2046,7 +2204,7 @@ export class GameEngine implements CombatHost {
       this.music.setIntensity(desired)
     }
 
-    const showGun = this.status !== 'menu'
+    const showGun = this.status !== 'menu' && !this.vehicles.isDriving
     this.gunRig.rifle.visible = showGun && this.weapon === 'rifle' && !this.isAiming
     this.gunRig.deagle.visible = showGun && this.weapon === 'deagle'
     this.gunRig.prism.visible = showGun && this.weapon === 'prism'
