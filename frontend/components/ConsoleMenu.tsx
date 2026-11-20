@@ -5,6 +5,7 @@ import { MUSIC_TRACKS } from '../game/music'
 import type { HudState } from '../game/types'
 import { MistAtmosphere } from './MistAtmosphere'
 import { NightGarage } from './NightGarage'
+import { buildIndustrialSportsCar } from '../game/models/neonSportsCar'
 import './ConsoleMenu.css'
 
 type ConsoleAction = 'confirm' | 'back' | 'controls' | 'audio' | 'track'
@@ -264,7 +265,7 @@ export function ConsoleMenu({ hud, profile, onStart, onAudio, onTrack, onWake }:
       </>}
       </div>
       {!standby && section === 'garage' ? (
-        <NightGarage onBack={() => setSection('games')} />
+        <NightGarage onBack={() => setSection('games')} buildCarModel={buildIndustrialSportsCar} />
       ) : standby ? (
         <main className="console-standby" aria-label="Console standby">
           <div className="standby-status"><ControllerStatus state={controller} /></div>

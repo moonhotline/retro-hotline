@@ -86,8 +86,9 @@
 .console-utilities button span { font-size: 17px; color: #c9d9e6; }
 .console-prism-stage {
   position: relative;
-  align-self: end;
+  align-self: stretch;
   display: flex;
+  align-items: flex-end;
   justify-content: flex-end;
   min-height: 260px;
   padding-bottom: 4px;

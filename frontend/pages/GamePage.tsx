@@ -344,6 +344,51 @@ export function Hud({ hud }: { hud: HudState }) {
         </div>
       </div>
 
+      {/* Vehicle Telemetry HUD (zero emojis, active while driving Neon GT Coupe) */}
+      {hud.vehicle?.active && (
+        <div
+          className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 rounded-xl border border-[#28e8ff]/35 bg-[#060810]/85 px-5 py-2.5 backdrop-blur-md shadow-[0_0_24px_rgba(40,232,255,0.18)]"
+          aria-label="Vehicle telemetry"
+        >
+          <div className="flex items-baseline gap-3">
+            <span className="font-orbitron text-3xl font-black tracking-wider text-white">
+              {hud.vehicle.speedKmh}
+            </span>
+            <span className="font-tech text-[10px] tracking-[0.28em] text-[#28e8ff]">KM/H</span>
+            {hud.vehicle.drifting && (
+              <span className="rounded border border-[#ff2e88]/60 bg-[#ff2e88]/20 px-2 py-0.5 font-orbitron text-[10px] font-bold tracking-[0.2em] text-[#ff5ca4]">
+                DRIFT
+              </span>
+            )}
+            {hud.vehicle.boosting && (
+              <span className="rounded border border-[#28e8ff]/70 bg-[#28e8ff]/20 px-2 py-0.5 font-orbitron text-[10px] font-bold tracking-[0.2em] text-[#8ef6ff]">
+                NITROUS
+              </span>
+            )}
+          </div>
+          <div className="w-48">
+            <div className="mb-0.5 flex justify-between font-tech text-[9px] tracking-[0.24em] text-white/55">
+              <span>NITROUS CORE</span>
+              <span>{Math.round(hud.vehicle.nitrous * 100)}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full transition-[width] duration-75"
+                style={{
+                  width: `${Math.round(hud.vehicle.nitrous * 100)}%`,
+                  background: hud.vehicle.boosting
+                    ? 'linear-gradient(90deg, #ff2e88, #28e8ff)'
+                    : 'linear-gradient(90deg, #28e8ff, #4dffbe)',
+                }}
+              />
+            </div>
+          </div>
+          <div className="font-tech text-[9px] tracking-[0.2em] text-white/50">
+            [E] EXIT · [SPACE] DRIFT · [SHIFT] NITROUS · [LMB] CANNONS
+          </div>
+        </div>
+      )}
+
       {/* weapon + ammo */}
       <div className="absolute bottom-4 right-4 text-right">
         <div className="mb-2 flex items-center justify-end gap-1.5">

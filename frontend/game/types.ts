@@ -21,6 +21,14 @@ export interface WaveProtocolState {
   accent: string
 }
 
+export interface VehicleHudState {
+  active: boolean
+  speedKmh: number
+  nitrous: number
+  drifting: boolean
+  boosting: boolean
+}
+
 export interface ShopItemData {
   id: string
   name: string
@@ -110,6 +118,7 @@ export interface HudState {
   pointerLocked?: boolean
   bossHud?: BossHudState | null
   waveProtocol?: WaveProtocolState | null
+  vehicle?: VehicleHudState | null
   storyModal?: {
     open: boolean
     entityId: string
