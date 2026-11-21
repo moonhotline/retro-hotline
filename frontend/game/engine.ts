@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { createSynthwaveGradePass } from './postprocess'
+import { VolumetricSunShaftPass } from './saoPaulo/volumetricLight'
 import { buildEnvironment } from './environment'
 import { resolveWalls } from './map'
 import {
@@ -90,6 +91,7 @@ export class GameEngine implements CombatHost {
   private composer: EffectComposer
   private bloomPass: UnrealBloomPass
   private gradePass: ShaderPass
+  private volumetricPass?: VolumetricSunShaftPass
   scene = new THREE.Scene()
   camera: THREE.PerspectiveCamera
   private clock = new THREE.Clock()
@@ -238,16 +240,23 @@ export class GameEngine implements CombatHost {
     this.camera.position.copy(this.pos)
     this.scene.add(this.camera)
 
+    this.env = buildEnvironment(this.scene)
+    this.env.applyStageTheme?.(this.levelManager.currentStage.environment)
+
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.30, 0.45, 0.62)
+
+    if (this.env.sunLight) {
+      this.volumetricPass = new VolumetricSunShaftPass(this.camera, this.env.sunLight)
+      this.composer.addPass(this.volumetricPass)
+    }
+
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 0.65)
     this.composer.addPass(this.bloomPass)
     this.gradePass = createSynthwaveGradePass()
     this.composer.addPass(this.gradePass)
     this.composer.addPass(new OutputPass())
 
-    this.env = buildEnvironment(this.scene)
-    this.env.applyStageTheme?.(this.levelManager.currentStage.environment)
     this.particles = new Particles(this.scene)
     this.gunRig = buildGun(this.camera)
     this.director = new WaveDirector(this)
@@ -573,6 +582,7 @@ export class GameEngine implements CombatHost {
         for (const m of list) m.dispose()
       }
     })
+    this.volumetricPass?.dispose()
     this.composer.dispose()
     this.renderer.dispose()
     if (this.renderer.domElement.parentElement === this.container) {
