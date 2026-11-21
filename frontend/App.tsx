@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Home } from './home/Home'
 import { concepts } from './lab/catalog'
 import type { Display, LabOptions, createRuntime } from './lab/runtime'
 
@@ -10,6 +11,7 @@ function textField(target: EventTarget | null) {
 
 export default function App() {
   const [options, setOptions] = useState(initial)
+  const [home, setHome] = useState(true)
   const [force, setForce] = useState(false)
   const [backend, setBackend] = useState<string | null>(null)
   const [triangles, setTriangles] = useState<number | null>(null)
@@ -18,6 +20,7 @@ export default function App() {
   const host = useRef<HTMLDivElement>(null)
   const runtime = useRef<ReturnType<typeof createRuntime> | null>(null)
   const currentOptions = useRef(options)
+  const showHome = home && !options.dev
 
   useEffect(() => {
     currentOptions.current = options
@@ -48,7 +51,7 @@ export default function App() {
       runtime.current = null
       engine?.dispose()
     }
-  }, [force])
+  }, [force, showHome])
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -64,6 +67,10 @@ export default function App() {
     setOptions(value => ({ ...value, ...change }))
   }
 
+  if (showHome) {
+    return <Home onEnterGame={() => setHome(false)} onEnterLab={() => update({ dev: true })} />
+  }
+
   const concept = concepts.find(item => item.id === options.display)
   const dark = options.dev && Boolean(concept)
   const comparison = dark && compare && concept
@@ -71,9 +78,12 @@ export default function App() {
   return (
     <main className={`workspace${dark ? ' workspace--dark' : ''}${options.dev ? ' workspace--dev' : ''}`}>
       <header className="topbar">
-        <div className="wordmark"><span className="mark" aria-hidden="true" />RETRO HOTLINE</div>
+        <button className="wordmark wordmark--home" type="button" aria-label="返回首页" onClick={() => {
+          setHome(true)
+          update({ dev: false })
+        }}><span className="mark" aria-hidden="true" />RETRO HOTLINE</button>
         <button className="space-toggle" aria-keyshortcuts="P" onClick={() => update({ dev: !options.dev })}>
-          {options.dev ? '返回主游戏' : '进入 Dev Lab'} <kbd>P</kbd>
+          {options.dev ? (home ? '返回首页' : '返回主游戏') : '进入 Dev Lab'} <kbd>P</kbd>
         </button>
       </header>
 
