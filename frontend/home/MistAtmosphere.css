@@ -24,6 +24,3 @@
 .mist-edge { position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, #050811b8 0%, #05081155 34%, transparent 64%), linear-gradient(0deg, #05081180, transparent 28%); }
 .mist-atmosphere[data-active='false'] .mist-volume { animation-play-state: paused; }
 @keyframes mist-tide { from { transform: translate3d(2%, -2%, 0) scale(1); opacity: .6; } to { transform: translate3d(-3%, 3%, 0) scale(1.08); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .mist-volume { animation: none; }
-}

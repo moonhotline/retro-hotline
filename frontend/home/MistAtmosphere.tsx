@@ -424,23 +424,29 @@ function drawFallback2D(
 }
 
 /** GSAP-choreographed WebGL optical crystal prism & liquid spectrum atmosphere. */
-export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
+export function MistAtmosphere({ energyBoost, paused }: { energyBoost: boolean; paused: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const hover = useRef({ amount: 0 })
+  const playback = useRef<{ paused: boolean; sync?: () => void }>({ paused })
 
   useEffect(() => {
+    playback.current.paused = paused
+    playback.current.sync?.()
+  }, [paused])
+
+  useEffect(() => {
+    if (paused) return
     const tween = gsap.to(hover.current, {
       amount: energyBoost ? 1 : 0,
       duration: energyBoost ? 0.55 : 0.85,
       ease: energyBoost ? 'expo.out' : 'power3.out',
     })
     return () => { tween.kill() }
-  }, [energyBoost])
+  }, [energyBoost, paused])
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
     let canvas = document.createElement('canvas')
 
     let width = 1
@@ -454,7 +460,7 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
     let driftY = 0
 
     // GSAP entrance & periodic iridescent caustic surge timeline
-    const rig = { reveal: motion.matches ? 1 : 0, surge: 0 }
+    const rig = { reveal: playback.current.paused ? 1 : 0, surge: 0 }
     const entranceTween = gsap.to(rig, { reveal: 1, duration: 1.35, ease: 'expo.out', paused: true })
     const pulseTimeline = gsap.timeline({ repeat: -1, delay: 1.6, repeatDelay: 2.2, paused: true })
       .to(rig, { surge: 0.58, duration: 0.55, ease: 'sine.inOut' })
@@ -523,7 +529,7 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
       driftX += (pointerX - driftX) * 0.08
       driftY += (pointerY - driftY) * 0.08
       const intensity = 1.06
-      const boost = motion.matches ? 0 : hover.current.amount
+      const boost = hover.current.amount
 
       if (gl && program) {
         gl.viewport(0, 0, canvas.width, canvas.height)
@@ -552,7 +558,7 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
     const sync = () => {
       cancelAnimationFrame(frame)
       previous = 0
-      const active = !document.hidden && !motion.matches
+      const active = !document.hidden && !playback.current.paused
       host.dataset.active = String(active)
       if (active) {
         entranceTween.resume()
@@ -561,11 +567,6 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
       } else {
         entranceTween.pause()
         pulseTimeline.pause()
-        if (motion.matches) {
-          rig.reveal = 1
-          rig.surge = 0
-          draw()
-        }
       }
     }
 
@@ -582,7 +583,7 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
     }
 
     const pointer = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return
+      if (event.pointerType !== 'mouse' || playback.current.paused) return
       const bounds = host.getBoundingClientRect()
       pointerX = Math.max(-1, Math.min(1, ((event.clientX - bounds.left) / width - 0.5) * 2))
       pointerY = Math.max(-1, Math.min(1, ((event.clientY - bounds.top) / height - 0.5) * 2))
@@ -590,8 +591,8 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
 
     const observer = new ResizeObserver(resize)
     observer.observe(host)
+    playback.current.sync = sync
     document.addEventListener('visibilitychange', sync)
-    motion.addEventListener('change', sync)
     window.addEventListener('pointermove', pointer, { passive: true })
 
     resize()
@@ -602,8 +603,8 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
       pulseTimeline.kill()
       cancelAnimationFrame(frame)
       observer.disconnect()
+      playback.current.sync = undefined
       document.removeEventListener('visibilitychange', sync)
-      motion.removeEventListener('change', sync)
       window.removeEventListener('pointermove', pointer)
       if (gl) {
         if (buffer) gl.deleteBuffer(buffer)
