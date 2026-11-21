@@ -37,6 +37,7 @@ button, select, input[type="checkbox"] { cursor: pointer; }
   letter-spacing: 0.14em;
 }
 .mark { display: inline-block; width: 9px; height: 9px; background: #202629; transform: rotate(45deg); }
+.wordmark--home { border: 0; padding: 6px 0; background: transparent; color: inherit; }
 .space-toggle {
   display: flex;
   align-items: center;
