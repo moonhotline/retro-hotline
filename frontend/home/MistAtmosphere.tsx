@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 import './MistAtmosphere.css'
 
+// The standby optics from 92b3a8b. Frame them through the canvas viewport.
 const VERTEX_SHADER = `
 attribute vec2 a_pos;
 varying vec2 vUv;
@@ -109,11 +110,11 @@ void main() {
   vec2 uv = (vUv - 0.5) * vec2(aspect, 1.0);
   float t = u_time;
 
-  float narrow = 1.0 - smoothstep(0.72, 1.15, aspect);
+  float narrow = smoothstep(1.15, 0.72, aspect);
   // Floating prism anchored cleanly in right-center golden focal zone
   vec2 bob = vec2(sin(t * 0.65) * 0.012, sin(t * 1.05) * 0.022);
-  vec2 prismPos = mix(vec2(0.22 * aspect, -0.01), vec2(0.00, -0.045), narrow) + bob + u_pointer * vec2(0.032, -0.024);
-  float prismScale = mix(0.245, min(0.16, aspect * 0.37), narrow) * (0.86 + 0.14 * u_reveal);
+  vec2 prismPos = mix(vec2(0.22 * aspect, -0.01), vec2(0.06, 0.07), narrow) + bob + u_pointer * vec2(0.032, -0.024);
+  float prismScale = mix(0.245, 0.185, narrow) * (0.86 + 0.14 * u_reveal);
 
   // Subtle rhythmic luxury breath synced to music tempo + GSAP hover surge
   float beatPhase = t * (u_bpm / 60.0) * PI;
@@ -453,10 +454,8 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
     let driftY = 0
 
     // GSAP entrance & periodic iridescent caustic surge timeline
-    const rig = { reveal: 1, surge: 0 }
-    const entranceTween = gsap.fromTo(rig, { reveal: 0 }, {
-      reveal: 1, duration: 1.35, ease: 'expo.out', paused: true, immediateRender: false,
-    })
+    const rig = { reveal: motion.matches ? 1 : 0, surge: 0 }
+    const entranceTween = gsap.to(rig, { reveal: 1, duration: 1.35, ease: 'expo.out', paused: true })
     const pulseTimeline = gsap.timeline({ repeat: -1, delay: 1.6, repeatDelay: 2.2, paused: true })
       .to(rig, { surge: 0.58, duration: 0.55, ease: 'sine.inOut' })
       .to(rig, { surge: 0, duration: 1.25, ease: 'power2.out' })
@@ -515,6 +514,8 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
     if (!gl) {
       canvas = document.createElement('canvas')
       ctx2d = canvas.getContext('2d', { alpha: true })
+    } else {
+      canvas.className = 'mist-optics'
     }
     host.append(canvas)
 
@@ -529,7 +530,7 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
         if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height)
         if (uTime) gl.uniform1f(uTime, elapsed)
         if (uPointer) gl.uniform2f(uPointer, driftX, driftY)
-        if (uBpm) gl.uniform1f(uBpm, 105)
+        if (uBpm) gl.uniform1f(uBpm, 125)
         if (uIntensity) gl.uniform1f(uIntensity, intensity)
         if (uReveal) gl.uniform1f(uReveal, rig.reveal)
         if (uSurge) gl.uniform1f(uSurge, Math.max(rig.surge, boost * 0.82))
@@ -574,8 +575,8 @@ export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
       height = Math.max(1, bounds.height)
       const maxDpr = gl ? 1.5 : 1.25
       const ratio = Math.min(window.devicePixelRatio || 1, maxDpr)
-      canvas.width = Math.max(1, Math.round(width * ratio))
-      canvas.height = Math.max(1, Math.round(height * ratio))
+      canvas.width = Math.max(1, Math.round(canvas.clientWidth * ratio))
+      canvas.height = Math.max(1, Math.round(canvas.clientHeight * ratio))
       if (ctx2d) ctx2d.setTransform(ratio, 0, 0, ratio, 0, 0)
       draw()
     }
