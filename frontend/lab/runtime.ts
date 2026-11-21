@@ -1,5 +1,5 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { Mesh, WebGPURenderer } from 'three/webgpu'
+import { ACESFilmicToneMapping, Mesh, NoToneMapping, PMREMGenerator, WebGPURenderer, type RenderTarget, type Texture } from 'three/webgpu'
 import { concepts, type ConceptId } from './catalog'
 import { createMaterialStudy } from './materialStudy'
 import { baseFov, createWhiteSpace } from './spaces'
@@ -16,6 +16,11 @@ export interface LabOptions {
 
 type Stage = ReturnType<typeof createWhiteSpace>
 
+// This method exists in Three r170's WebGPU generator, but its r170 type package omits it.
+type EnvironmentGenerator = PMREMGenerator & {
+  fromEquirectangular(texture: Texture): RenderTarget
+}
+
 export function createRuntime(
   host: HTMLElement,
   forceWebGL: boolean,
@@ -25,9 +30,11 @@ export function createRuntime(
   const canvas = document.createElement('canvas')
   canvas.className = 'world'
   const renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL })
+  renderer.shadowMap.enabled = true
   const main = createWhiteSpace()
   const dev = createWhiteSpace()
   let active: Stage = main
+  let generator: EnvironmentGenerator | undefined
   let study: ReturnType<typeof createMaterialStudy> | undefined
   let volume: ReturnType<typeof createVolumePass> | undefined
   let orbit: OrbitControls | undefined
@@ -39,6 +46,7 @@ export function createRuntime(
   let poseRupture: ((elapsed: number) => boolean) | undefined
   let ruptureStart: number | null = null
   let selection = 0
+  let lens = baseFov
   let hasVolume = false
   let pendingVolume = false
   let width = 1
@@ -49,6 +57,7 @@ export function createRuntime(
     if (!initialized || closed) return
     try {
       if (ruptureStart !== null && !poseRupture?.((now - ruptureStart) / 1000)) ruptureStart = null
+      renderer.toneMapping = disposePreview ? ACESFilmicToneMapping : NoToneMapping
       renderer.render(active.scene, active.camera)
       if (pendingVolume && hasVolume && volume) {
         volume.render(active.camera, active === study ? labWindow : dockWindow)
@@ -68,7 +77,7 @@ export function createRuntime(
     width = Math.max(1, host.clientWidth)
     height = Math.max(1, host.clientHeight)
     const aspect = width / height
-    const fit = Math.tan(baseFov * Math.PI / 360) * Math.max(1, 1.28 / aspect)
+    const fit = Math.tan(lens * Math.PI / 360) * Math.max(1, (disposePreview ? 1.48 : 1.28) / aspect)
     active.camera.aspect = aspect
     active.camera.fov = Math.min(115, Math.atan(fit) * 360 / Math.PI)
     active.camera.updateProjectionMatrix()
@@ -115,6 +124,7 @@ export function createRuntime(
       disposePreview?.()
       disposePreview = undefined
       reportTriangles(null)
+      lens = baseFov
       active = next.dev ? dev : main
       if (display === 'materials') {
         study ??= createMaterialStudy()
@@ -126,12 +136,20 @@ export function createRuntime(
       const concept = concepts.find(candidate => candidate.id === display)
       if (concept) {
         try {
-          const [{ createConceptStage }, { disposeMeshes }] = await Promise.all([
-            import('./models/conceptStage'), import('./models/geometry'),
-          ])
+          const { createConceptStage, loadModel } = await import('./models/conceptStage')
+          const factory = await loadModel(concept.id)
+          await ready
           if (closed || revision !== selection) return
-          const preview = createConceptStage(concept)
-          disposePreview = () => disposeMeshes(preview.scene)
+          const preview = createConceptStage(concept, factory)
+          disposePreview = preview.dispose
+          generator ??= new PMREMGenerator(renderer) as EnvironmentGenerator
+          const filtered = generator.fromEquirectangular(preview.probe)
+          preview.scene.environment = filtered.texture
+          disposePreview = () => {
+            filtered.dispose()
+            preview.dispose()
+          }
+          lens = preview.fov
           active = preview
           poseRupture = preview.poseRupture
           orbit = new OrbitControls(preview.camera, canvas)
@@ -150,6 +168,10 @@ export function createRuntime(
           syncStudy()
           resize()
         } catch (error) {
+          if (closed || revision !== selection) return
+          disposePreview?.()
+          disposePreview = undefined
+          active = dev
           reportError(error instanceof Error ? error.message : String(error))
         }
       }
@@ -196,6 +218,7 @@ export function createRuntime(
           }
         })
       }
+      generator?.dispose()
       if (initialized) renderer.dispose()
       canvas.remove()
     },

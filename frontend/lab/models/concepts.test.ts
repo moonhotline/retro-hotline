@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Color, Mesh } from 'three/webgpu'
 import { concepts } from '../catalog'
 import { createWhiteSpace } from '../spaces'
-import { createConceptStage } from './conceptStage'
-import { disposeMeshes } from './geometry'
+import { createConceptStage, loadModel } from './conceptStage'
 
 describe('rebuild spaces', () => {
   it('starts with two independent white scenes', () => {
@@ -17,8 +16,8 @@ describe('rebuild spaces', () => {
     }
   })
 
-  it.each(concepts)('ships density-checked geometry for $name', concept => {
-    const { scene, triangles } = createConceptStage(concept)
+  it.each(concepts)('ships density-checked geometry for $name', async concept => {
+    const { scene, triangles, dispose } = createConceptStage(concept, await loadModel(concept.id))
     try {
       expect(triangles).toBeGreaterThanOrEqual(100_000)
       expect(triangles).toBeLessThanOrEqual(1_000_000)
@@ -29,7 +28,7 @@ describe('rebuild spaces', () => {
         expect(faces, object.name).toBeGreaterThanOrEqual(10_000)
       })
     } finally {
-      disposeMeshes(scene)
+      dispose()
     }
   })
 })
