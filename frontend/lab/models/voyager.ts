@@ -1,5 +1,5 @@
 import { Group, PointLight } from 'three/webgpu'
-import { batch, finish, plating, ribbon, strut, type Point } from './geometry'
+import { batch, capsule, finish, plating, ribbon, strut, type Point } from './geometry'
 import { landscape } from './landscape'
 import { industrialSurface, textured } from './surfaces'
 import { publicAtrium } from './atrium'
@@ -27,6 +27,18 @@ export function voyager() {
   lime.position.set(4.61,.48,6)
   root.add(lime)
   publicAtrium(root,15.2,2.65,x=>5.6+Math.abs(x-2.6)*.22,false)
+  const reveals = []
+  const runs = [[left,hinge,ridge],[right,tip,ridge]] as const
+  for (const [outer,edge,apex] of runs) {
+    for (const amount of [.23,.47,.70]) {
+      const along = (start: Point): Point => [start[0] + (edge[0] - start[0]) * amount,
+        start[1] + (edge[1] - start[1]) * amount + .02, start[2] + (edge[2] - start[2]) * amount]
+      const a = along(outer)
+      const b = along(apex)
+      reveals.push(capsule(a,b,.019,34,27))
+    }
+  }
+  batch(root,reveals,finish(0x26292b,.51,.58),'Standing seams on the folding steel eaves')
   const diagrid = []
   for (let i=0;i<10;i++) {
     const x=-15+i*3.1
@@ -39,10 +51,10 @@ export function voyager() {
   const planters = [-1,1].map(side => ribbon([[side*3.05,.22,19],[side*4.9,.22,11.6],
     [side*7.9,.22,5.7],[side*12.2,.22,4.81]],.235,118,46))
   batch(root,planters,textured(finish(0x666364,.75,.07),801,'stone',.046),'Curved concrete planters')
-  landscape(root,[[-11.1,12.4,6.39],[-13.7,4.6,4.0],[9.1,7.4,2.6],[11.7,3.6,3.4],[14.2,5,3.8],
+  landscape(root,[[-8.9,16.7,6.39],[-13.7,4.6,4.0],[9.1,7.4,2.6],[11.7,3.6,3.4],[14.2,5,3.8],
     [16.2,11.4,4.6],[-9.1,5.39,2.9]],
-    [[-5.6,1.18,15.7],[-6.2,1.2,13],[-7,1.05,10.4],[-10.5,1.31,7.4],
-    [6.6,1.06,12.4],[9.4,1.3,8.2],[12.0,1.4,7.2]],
+    [[-4.48,1.14,17.55],[-5.6,1.34,15.7],[-6.2,1.2,13],[-7,1.05,10.4],[-10.5,1.31,7.4],
+    [5.27,1.09,15.4],[6.6,1.19,12.4],[9.4,1.3,8.2],[12.0,1.4,7.2]],
     [[-4.09,.62,16.55],[-5.4,.64,12.8],[-6.45,.63,9.55],[5.3,.62,13.6],[6.92,.61,9.2]],464)
   return root
 }

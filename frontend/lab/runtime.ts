@@ -93,7 +93,7 @@ export function createRuntime(
       study.roughness.value = settings.roughness
     }
     hasVolume = active === study ? settings.volume :
-      active !== main && active !== dev && settings.display === 'docks'
+      active !== main && active !== dev && settings.display === 'docks' && settings.volume
     if (hasVolume && !volume) {
       try {
         volume = createVolumePass()
@@ -156,7 +156,9 @@ export function createRuntime(
           orbit.target.fromArray(concept.target)
           orbit.minDistance = 2
           orbit.maxDistance = 95
-          orbit.maxPolarAngle = Math.PI * 0.49
+          // Concept cameras sit near the ground and look up at the subject.
+          // OrbitControls clamps the authored pose on its first update.
+          orbit.maxPolarAngle = Math.PI * 0.60
           orbit.enablePan = false
           orbit.addEventListener('change', () => {
             pendingVolume = true

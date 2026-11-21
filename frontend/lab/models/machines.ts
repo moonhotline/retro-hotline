@@ -1,7 +1,7 @@
 import { Group, Vector3 } from 'three/webgpu'
 import { ring } from './cutaway.js'
 import { batch, capsule, finish, patch, plating, ribbon, strut, type Point } from './geometry'
-import { industrialSurface, textured } from './surfaces'
+import { armorSurface, textured } from './surfaces'
 
 const spiderShell = [
   [[-0.66,.61,-0.92],[0.58,.66,-.91],[0.86,.57,-.39],[.68,.66,.44],[-.68,.64,.52],[-.92,.52,-.30]],
@@ -21,10 +21,10 @@ const bugShell = [
 
 export function machine(wide: boolean) {
   const root = new Group()
-  const armor = industrialSurface(wide ? '#56553a' : '#3c454a', wide ? '#777150' : '#60696e', 65, 0.58)
-  textured(armor, 733, 'metal', 0.008)
+  const armor = armorSurface(wide)
   const housing = textured(finish(0x292a28, 0.53, 0.55), 562, 'metal', 0.015)
-  const joint = finish(0x777979, 0.28, 0.76)
+  const joint = textured(finish(0x797670, 0.37, 0.80), 43, 'metal', 0.012)
+  const fastener = finish(0x6d6a5f, 0.47, 0.72)
   const black = finish(0x14171a, 0.67)
   const accent = wide ? 0xff8a18 : 0x0f9fc0
   const sensor = finish(accent, 0.26, 0.25, accent, 2.9)
@@ -37,9 +37,25 @@ export function machine(wide: boolean) {
 
   const design = wide ? bugShell : spiderShell
   const count = design.length
-  const plates = design.map((outline, i) => batch(root, [plating(
-    outline.map(([x, y, z]) => [x, y + level, z]), wide ? .20 : .23, 26,
-  )], armor, `Bevelled armor ${i + 1}`))
+  const plates = design.map((outline, i) => {
+    const mount = new Group()
+    mount.name = `Armor panel ${i + 1}`
+    root.add(mount)
+    const boundary = outline.map(([x, y, z]) => new Vector3(x * (wide ? 1.07 : 1.02), y * (wide ? .94 : 1.43) + level, z))
+    const center = boundary.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(boundary.length)
+    batch(mount, [plating(boundary.map(vertex => vertex.toArray()), wide ? .20 : .23, 26)],
+      armor, 'Faceted wear and bevels')
+    const screws = boundary.flatMap((vertex, j) => {
+      const next = boundary[(j + 1) % boundary.length]!
+      return [.15,.84].map(offset => {
+        const a = vertex.clone().lerp(next, offset).lerp(center, .14)
+        const b = a.clone().add(new Vector3(0, .017, 0))
+        return capsule(a.toArray(), b.toArray(), wide ? .039 : .029, 30, 22)
+      })
+    })
+    batch(mount, screws, fastener, 'Recessed perimeter fastener heads')
+    return mount
+  })
   const debris = new Group()
   debris.name = 'Core rupture'
   const hot = finish(accent, 0.28, 0.48, accent, 3.2)
@@ -62,6 +78,13 @@ export function machine(wide: boolean) {
   const bezelZ = wide ? 1.35 : 1.19
   batch(root, [plating([[-edge,chin + .31,bezelZ - .10],[edge,chin + .31,bezelZ - .10],
     [edge * .88,chin + .26,bezelZ + .18],[-edge * .88,chin + .26,bezelZ + .18]], .23, 28)], housing, 'Recessed optics housing')
+  const driveParts = [-1,1].flatMap(side => [
+    strut([side * .38,chin - .03,1.22],[side * 1.05,chin + .14,.84],.123,.097,48,32),
+    strut([side * .62,chin - .10,.66],[side * .85,chin - .09,-.64],.12,.102,46,30),
+    ribbon([[side*.59,chin+.14,1.06],[side*.78,chin-.14,.85],
+      [side*.9,chin-.19,.28],[side*.87,chin+.06,-.41]],.056,51,32),
+  ])
+  batch(root, driveParts, housing, 'Secondary cheek armor, drive rails and recessed cabling')
   const cells = wide ? [-0.65,-0.49,0.49,0.65] : [0]
   batch(root, cells.map(x => capsule(
     [x - (wide ? .033 : .37), chin + .14, bezelZ + .195],
@@ -82,7 +105,7 @@ export function machine(wide: boolean) {
       const near = leg === pairs - 1
       const hip: Point = [side * (wide ? 1.13 : 0.94), level - 0.16, offset * 0.56]
       const knee: Point = [side * ((wide ? 1.86 : 2.04) + (near ? .02 : .18)),
-        wide ? .78 : near ? 2.66 : 2.28 - Math.abs(offset) * .05, offset * (wide ? .92 : 1.15)]
+        wide ? .78 : near ? 2.79 : 2.32 - Math.abs(offset) * .05, offset * (wide ? .92 : 1.15)]
       const ankle: Point = [side * ((wide ? 2.24 : 2.66) + (near ? -.12 : .11)),
         wide ? .31 : 1.17, offset * (wide ? 1.16 : 1.45)]
       const toe: Point = [side * ((wide ? 2.54 : 3.32) + (near ? -.28 : .06)), 0.12,
@@ -96,10 +119,28 @@ export function machine(wide: boolean) {
         strut(knee, ankle, thick * .83, thick * 1.31, 58, 40),
         strut(ankle, toe, thick * .62, thick * .90, 56, 40),
       ], armor, 'Three armor links')
+      const bearingAngle = -side * Math.PI * (.37 + offset * .06)
       const bearings = [hip, knee, ankle].map((node, i) =>
-        ring(-0.16, 0.16, .054, (i === 1 ? .206 : .168) * (wide ? 1.11 : 1), .034, { segs: 128, smooth: 37 })
-          .rotateY(Math.PI * (0.42 + offset * .064)).translate(...node))
+        ring(-0.16, 0.16, .054, (i === 1 ? .206 : .168) * (wide ? 1.11 : 1), .034, { segs: 108, smooth: 30 })
+          .rotateY(bearingAngle).translate(...node))
       batch(legGroup, bearings, joint, 'Flanged bearings at hip, knee and ankle')
+      const hubAxis = new Vector3(Math.cos(bearingAngle), 0, -Math.sin(bearingAngle)).multiplyScalar(side)
+      const caps = [hip,knee,ankle].flatMap((node, i) => {
+        const start = new Vector3(...node).addScaledVector(hubAxis,.145)
+        const end = start.clone().addScaledVector(hubAxis,.043)
+        return [capsule(start.toArray(),end.toArray(),i === 1 ? .138 : .112,48,10)]
+      })
+      const fasteners = [hip,knee,ankle].flatMap((node, i) => {
+        const r = i === 1 ? .151 : .119
+        const center = new Vector3(...node).addScaledVector(hubAxis,.187)
+        return Array.from({length: 7},(_, fastener) => {
+          const angle = fastener * Math.PI * 2 / 7
+          const start = center.clone().add(new Vector3(hubAxis.z * Math.cos(angle) * r,
+            Math.sin(angle) * r, -hubAxis.x * Math.cos(angle) * r))
+          return capsule(start.toArray(),start.clone().addScaledVector(hubAxis,.017).toArray(),.017,25,10)
+        })
+      })
+      batch(legGroup,fasteners,fastener,'Axle-cap fasteners')
 
       const linkPairs = [[hip, knee], [knee, ankle]] as const
       const pistons = linkPairs.map(([from, to]) => {
@@ -110,8 +151,9 @@ export function machine(wide: boolean) {
         end.add(setback)
         return { start, end, middle: start.clone().lerp(end, .56) }
       })
-      batch(legGroup, pistons.map(piston => capsule(piston.start.toArray(), piston.middle.toArray(), .086, 62, 42)),
-        housing, 'Dark hydraulic sleeves')
+      batch(legGroup, [...caps, ...pistons.map(piston =>
+        capsule(piston.start.toArray(), piston.middle.toArray(), .086, 62, 42))],
+      housing, 'Inset axle caps and dark hydraulic sleeves')
       batch(legGroup, pistons.map(piston => capsule(piston.middle.toArray(), piston.end.toArray(), .049, 62, 42)),
         joint, 'Exposed chrome piston rods')
       batch(legGroup, [ribbon([

@@ -1,7 +1,7 @@
 import { DoubleSide, Group, MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu'
 import { color, mix, sin, smoothstep, uv } from 'three/tsl'
-import { batch, capsule, facade, finish, patch, strut } from './geometry'
-import { driftingHaze } from './haze'
+import { batch, capsule, facade, finish, patch, ribbon, strut, type Point } from './geometry'
+import { driftingHaze, lightHalos } from './haze'
 import { seeded, textured } from './surfaces'
 import { glassTower, point } from './cityDetails'
 
@@ -42,7 +42,7 @@ export function square() {
       parapets.push(strut([inner-side*.2,3.6,z],[inner-side*.2,3.6,end],thick*.45,.11,31,28))
       if (i>0 && i<5) {
         const x=inner-side*.36
-        const y=5.25 + i*.63
+        const y=5.06 + i*.35
         signs.push(patch((u,v)=>[x-side*Math.sin(Math.PI*u)*.42,y+v*(5.2 + (i%2)*3),z-.42-u*7.94],94,78))
         parapets.push(strut([x,y-.11,z-.39],[x,y-.11,z-8.4],.125,.105,29,24))
       }
@@ -65,7 +65,7 @@ export function square() {
   batch(root,parapets,finish(0x29343c,.55,.65),'Billboard casings and lower lintels')
 
   const stair = [], red = [], rail = []
-  const left=-8.8
+  const left=-8.25
   for (let i=0;i<10;i++) {
     const x=left + (9-i)*.48
     const y=.165 + i*.178
@@ -79,19 +79,36 @@ export function square() {
   }
   for (const y of [.40,1.29]) rail.push(capsule([-5.09,y,17.2],[-5.09,y,2.37],.041,114,38))
   batch(root,rail,finish(0x818a92,.24,.71),'Steel stair handrails')
-  const glass = new MeshStandardNodeMaterial({ color:0x8fa2ad,roughness:.21,metalness:.27,
+  const glass = new MeshStandardNodeMaterial({ color:0x8fa2ad,roughness:.24,metalness:.34,
     transparent:true,opacity:.22,side:DoubleSide,depthWrite:false })
   batch(root,[facade([-5.09,.25,17.2],[-5.09,.25,2.4],[-5.09,1.21,17.2])],glass,'Glazed balustrade')
+  const poles = []
+  const filaments = []
+  const streetLamps: Point[] = []
+  for (const side of [-1,1]) {
+    for (const z of [13,2,-9,-21,-36]) {
+      const x = side * 5.93
+      const end = x - side * .91
+      poles.push(ribbon([[x,.02,z],[x,3.9,z],[x,4.89,z],[end,5.29,z]],.039,49,22))
+      filaments.push(capsule([end-.11,5.22,z],[end+.11,5.22,z],.058,26,22))
+      streetLamps.push([end,5.22,z+.11])
+    }
+  }
+  batch(root,poles,finish(0x282a27,.48,.71),'Street lighting with curved rain-wet standards')
+  batch(root,filaments,finish(0xe5c0a2,.31,.22,0xffbd84,4.4),'Warm sodium street fixtures')
+  lightHalos(root,streetLamps,.52,'#f8c58f',.25)
+  point(root,0xffb37e,39,11,[4.91,4.94,13])
+  point(root,0xfec481,22,9,[-5,4.94,2])
   const posts=[]
   for(const z of [18.5,14.8,10.9,6.9,2.7,-1.6,-6,-10.9,-16,-21]){
     posts.push(capsule([3.45,.01,z],[3.45,.99,z],.145,50,36))
   }
   batch(root,posts,finish(0x8b8781,.26,.83),'Wet stainless steel bollards')
-  point(root,0xef1738,74,17,[-3.9,1.36,11])
+  point(root,0xf52137,52,13,[-3.9,.9,12])
   point(root,0xff5067,140,21,[2.3,4.5,-25])
   point(root,0x5b93de,100,24,[6.1,2.4,2])
 
-  const rain=new MeshBasicNodeMaterial({transparent:true,depthWrite:false,side:DoubleSide,opacity:.24})
+  const rain=new MeshBasicNodeMaterial({transparent:true,depthWrite:false,side:DoubleSide,opacity:.29})
   rain.colorNode=color('#9cb4ce')
   const rng=seeded(790)
   const streaks=[]

@@ -12,6 +12,7 @@ export function gate() {
   const cladding = []
   const rails = []
   const steelwork = []
+  const deck = []
   const lampFrames = []
   const lampGlass = []
   const lamps: Point[] = []
@@ -45,9 +46,15 @@ export function gate() {
       }
     }
   }
+  for (const side of [-1,1]) {
+    const x = 6.04 * side
+    deck.push(facade([x - .20,.09,35],[x + .20,.09,35],[x - .20,.09,-87],22,120))
+    deck.push(facade([x - side*.20,.09,35],[x - side*.20,-.05,35],[x - side*.20,.09,-87],15,124))
+  }
+  batch(root,deck,textured(finish(0x3b3630,.77,.09),158,'stone',.015),'Concrete curb and rain channel')
   batch(root,towers,steel,'Tapered portal towers and web plates')
   batch(root,[...ribs,...cladding],finish(0x7c3825,.57,.51),'Tower seams, ribs and rivet heads')
-  const cableHeight = (z: number) => z > 0 ? 4.7 + 20.8 * Math.exp(-z * 0.145) :
+  const cableHeight = (z: number) => z > 0 ? 4.75 + 20.75 * Math.exp(-z * 0.101) :
     7.3 + 18.2 * Math.pow((z + 29) / 29, 2)
   for (const side of [-1, 1]) {
     const x = side * 6.3
@@ -70,15 +77,16 @@ export function gate() {
     for (let z = 33; z > -80; z -= 3.2) {
       rails.push(strut([x,0,z],[x,1.24,z],.075,.079,12,20))
     }
-    for (const z of (side > 0 ? [23,7,-13,-25,-37,-50,-64] : [5,-7,-19,-31,-43,-55,-69])) {
+    for (const z of (side > 0 ? [19,7,-13,-25,-37,-50,-64] : [5,-7,-19,-31,-43,-55,-69])) {
       const end = x - side * 1.34
-      lampFrames.push(ribbon([[x,0,z],[x,4.38,z],[x,5.21,z],
-        [x-side*.63,5.73,z],[end,5.73,z]],.063,85,22))
-      lampGlass.push(capsule([end-.24,5.69,z],[end+.24,5.69,z],.11,36,23))
+      const low = z === 19 ? -.67 : 0
+      lampFrames.push(ribbon([[x,0,z],[x,4.38+low,z],[x,5.21+low,z],
+        [x-side*.63,5.73+low,z],[end,5.73+low,z]],.063,85,22))
+      lampGlass.push(capsule([end-.24,5.69+low,z],[end+.24,5.69+low,z],.11,36,23))
       if (z > -45) {
-        lamps.push([end,5.69,z+.18])
+        lamps.push([end,5.69+low,z+.18])
         const light = new PointLight(0xff983e, 135, 24, 2)
-        light.position.set(end,5.43,z)
+        light.position.set(end,5.43+low,z)
         root.add(light)
       }
     }
@@ -95,7 +103,7 @@ export function gate() {
     side * (11 + v * 53), -0.9 + Math.sin(u*9 + side) * 3.4 * v + v * 4.7,
     -19 - u * 160,
   ],144,50)),finish(0x283337,.93,.04),'Distant fogbank and coastal headlands')
-  lightHalos(root,lamps,1.12,'#f68c36',.25)
-  driftingHaze(root,[[.5,1.65,-36],[-4.7,2.2,-46],[1.8,2.62,-67],[7.5,3.05,-75]],'#707c8a',12,2.65)
+  lightHalos(root,lamps,1.22,'#f68c36',.32)
+  driftingHaze(root,[[.5,1.6,-14],[-4.7,2.2,-32],[1.8,2.62,-48],[7.5,3.05,-61]],'#69737d',14,3.4)
   return root
 }

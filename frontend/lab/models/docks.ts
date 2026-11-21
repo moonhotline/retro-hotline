@@ -1,5 +1,5 @@
 import { DoubleSide, Group, MeshStandardNodeMaterial } from 'three/webgpu'
-import { color, mix, positionWorld, smoothstep } from 'three/tsl'
+import { color, mix, positionWorld, smoothstep, vec3 } from 'three/tsl'
 import { batch, capsule, facade, finish, ribbon, strut } from './geometry'
 import { driftingHaze, lightHalos } from './haze'
 import { industrialSurface, textured } from './surfaces'
@@ -7,10 +7,14 @@ import { point } from './cityDetails'
 
 export function docks() {
   const root = new Group()
-  const wall=industrialSurface('#292c2c','#535149',141,.07)
-  const door=industrialSurface('#5b3b1a','#8c6235',827,.64)
+  const wall=industrialSurface('#292b29','#555148',141,.035)
+  const seamX = positionWorld.z.div(2.24).add(positionWorld.y.div(1.32).floor().mul(.5)).fract().sub(.5).abs()
+  const seamY = positionWorld.y.div(1.32).fract().sub(.5).abs()
+  const mortar = smoothstep(.468,.497,seamX.max(seamY))
+  wall.colorNode = vec3(wall.colorNode!).mul(mortar.mul(.64).oneMinus())
+  const door=industrialSurface('#574323','#8a5f30',827,.49)
   const safety=textured(finish(0xac6928,.52,.46),861,'metal',.027)
-  const gantry=industrialSurface('#303136','#60513e',136,.52)
+  const gantry=industrialSurface('#292b2c','#555047',136,.54)
   const ceiling=[]
   const grating=[]
   batch(root,[
@@ -56,6 +60,15 @@ export function docks() {
   hazard.colorNode=mix(color('#191d1e'),color('#c18935'),smoothstep(.48,.54,slash))
   batch(root,[facade([-7.74,5.21,-9.29],[7.74,5.21,-9.29],[-7.74,5.79,-9.29]),
     facade([7.15,.14,-7.38],[8.15,.14,-7.38],[7.15,.81,-7.38],65,40)],hazard,'Chipped diagonal caution striping')
+  const tracks = [-3.65,-1.7,2.4,4.35].map(x =>
+    strut([x,.007,19],[x,.007,-27],.024,.014,58,27))
+  const drains = []
+  for (let i = 0; i < 92; i++) {
+    const z = 16.8 - i *.31
+    drains.push(strut([-5.32,.003,z],[-4.96,.003,z],.029,.018,8,12))
+  }
+  batch(root,tracks,finish(0x403a31,.37,.76),'Embedded industrial rails reflecting light at grazing angles')
+  batch(root,drains,finish(0x282724,.52,.68),'Cast iron drain grate beside the catwalk')
   const mezz=[]
   const rail=[]
   for(let i=0;i<17;i++){
@@ -74,6 +87,11 @@ export function docks() {
   batch(root,[facade([-8.54,4.89,-3.88],[-8.54,4.89,-7.86],[-8.54,6.37,-3.88])],
     finish(0x446677,.31,.53,0x37698a,.95),'Blue inspection room window')
   const pipes=[]
+  for (let i = 0; i < 3; i++) {
+    const offset = i * .19
+    pipes.push(ribbon([[-7.4 + offset,11.12,18],[-7.4 + offset,11.12,-5.5],
+      [-7.4 + offset,10.6,-8.70],[-7.47 + offset,8.3,-8.9],[-7.47 + offset,.25,-8.9]],.046,82,18))
+  }
   for(const x of [7.55,7.79,8.02]){
     pipes.push(ribbon([[x,.56,-6.9],[x,3.51,-6.9],[x,4.53,-6.91],
       [x,5.09,-5.99],[x,7.35,-5.79],[x,11.48,-5.79]],.075,85,27))
@@ -91,7 +109,11 @@ export function docks() {
     freight.push(strut([x,1.13,z],[x,1.13,z-4.7],.89,1.13,35,29))
     if(i%4===0) freight.push(strut([x,3.25,z],[x,3.25,z-4.7],.89,1.02,37,24))
   }
-  batch(root,freight,industrialSurface('#263847','#64432e',222,.52),'Container stacks visible below the door')
+  const cargoPaint = industrialSurface('#294456','#735036',222,.4)
+  const ribsAt = positionWorld.z.mul(5.15).fract().sub(.5).abs()
+  const corrugation = smoothstep(.10,.35,ribsAt)
+  cargoPaint.colorNode = vec3(cargoPaint.colorNode!).mul(corrugation.mul(.41).add(.59))
+  batch(root,freight,cargoPaint,'Corrugated container stacks visible below the door')
   const crane=[]
   for(const x of [-5,7.5]){
     for(const z of [-32,-47]){
@@ -99,14 +121,23 @@ export function docks() {
       crane.push(strut([x,11.7,z],[x+9.5,11.7,z],.16,.22,62,25))
       crane.push(strut([x,16.7,z],[x+7.3,11.9,z],.085,.087,34,17))
       crane.push(strut([x,11.5,z],[x,16.9,z],.11,.12,32,19))
+      crane.push(strut([x+3.28,0,z],[x+1.5,11.7,z],.18,.18,33,17))
+      crane.push(strut([x+3.0,.7,z],[x,8.0,z],.10,.10,31,17))
+      crane.push(strut([x+3.2,6.7,z],[x,2.8,z],.085,.096,25,14))
     }
   }
   batch(root,crane,finish(0x25333c,.70,.44),'Distant dockside cargo cranes')
-  point(root,0xff8432,260,20,[-3.5,7.44,-6])
-  point(root,0xffab5f,65,10,[-8.17,3.9,2.8])
+  const beacons = [[-5,16.9,-32],[7.5,16.9,-47],[4.5,11.9,-32],[17,11.9,-47]] as const
+  batch(root,beacons.map(([x,y,z])=>capsule([x,y,z],[x,y+.15,z],.078,42,30)),
+    finish(0x9d1214,.44,.14,0xf13826,4.5),'Crane obstruction lights')
+  lightHalos(root,beacons,.65,'#ed4331',.43)
+  point(root,0xf58e38,150,17,[-3.5,7.44,-6])
+  point(root,0xffab5f,36,8,[-8.17,3.9,2.8])
+  point(root,0xd99153,9.5,6,[-6.1,1.2,10.4])
+  point(root,0xff963c,28,12,[1.8,6.42,-8.66])
   point(root,0x32c4ec,82,11,[7.11,2.41,-6.62])
   point(root,0x7197cb,320,27,[-4.3,7.7,-22])
   lightHalos(root,[[-7.96,3.9,2.88]],.64,'#ffaa5d',.24)
-  driftingHaze(root,[[-4.8,2.6,-25],[2.7,3,-35],[.6,4,-45]],'#6d889c',8.5,4.2)
+  driftingHaze(root,[[-4.8,2.1,-26],[2.7,3,-36],[.6,4,-45]],'#456982',7.9,3.6)
   return root
 }
