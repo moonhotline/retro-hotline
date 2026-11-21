@@ -19,6 +19,8 @@ uniform vec2 panes[4];
 uniform vec2 paneSize;
 uniform vec2 lightSlope;
 uniform float ceiling;
+uniform vec4 grille;
+uniform float density;
 in vec2 vNdc;
 out vec4 scatteredLight;
 
@@ -36,14 +38,24 @@ float depthInPane(vec3 eye, vec3 ray, vec2 pane) {
   float start = max(0.0, max(entered.x, max(entered.y, entered.z)));
   float end = min(exited.x, min(exited.y, exited.z));
   if (end <= start) return 0.0;
-  float stepSize = (end - start) / 12.0;
+  float stepSize = (end - start) / 18.0;
   float opticalDepth = 0.0;
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 18; i++) {
     vec3 p = local + direction * (start + (float(i) + 0.5) * stepSize);
     vec2 d = paneSize - abs(p.xy);
     float feather = smoothstep(0.0, 0.12, min(d.x, d.y));
     float fade = smoothstep(0.12, 1.05, p.z) * (1.0 - smoothstep(ceiling - 0.92, ceiling, p.z));
-    opticalDepth += feather * fade * stepSize;
+    float shadow = 1.0;
+    if (grille.z > 0.0) {
+      vec2 opening = p.xy + pane + lightSlope * ceiling;
+      vec2 slat = abs(fract((opening - grille.xy) / grille.zw + 0.5) - 0.5);
+      float penumbra = mix(0.23, 0.065, clamp(p.z / ceiling, 0.0, 1.0));
+      shadow = mix(0.19, 1.0, smoothstep(0.045, penumbra, slat.x)
+        * smoothstep(0.078, penumbra + 0.08, slat.y));
+      fade *= 0.78 + 0.15 * sin(p.z * 2.1 + p.x * 3.1 + p.y * 4.1)
+        + 0.07 * sin(p.z * 7.3 - p.x * 8.4);
+    }
+    opticalDepth += shadow * feather * fade * stepSize;
   }
   return opticalDepth;
 }
@@ -53,7 +65,8 @@ void main() {
   vec3 ray = normalize(mat3(viewToWorld) * (projectionInverse * vec4(vNdc, 0.5, 1.0)).xyz);
   float opticalDepth = 0.0;
   for (int i = 0; i < 4; i++) opticalDepth += depthInPane(eye, ray, panes[i]);
-  scatteredLight = vec4(0.98, 0.68, 0.23, 1.0 - exp(-opticalDepth * 0.42));
+  vec3 tint = mix(vec3(1.0, 0.49, 0.13), vec3(1.0, 0.74, 0.39), clamp(opticalDepth * 0.2, 0.0, 1.0));
+  scatteredLight = vec4(tint, 1.0 - exp(-opticalDepth * density));
 }
 `
 
@@ -62,6 +75,8 @@ interface WindowLight {
   size: readonly [number, number]
   slope: readonly [number, number]
   ceiling: number
+  grid: readonly [number, number, number, number]
+  density: number
 }
 
 export const labWindow: WindowLight = {
@@ -69,14 +84,18 @@ export const labWindow: WindowLight = {
   size: paneSize,
   slope: lightSlope,
   ceiling: 5.4,
+  grid: [0, 0, 0, 0],
+  density: 0.42,
 }
 
-export const dockWindow: WindowLight = {
-  panes: [-3.15, 2, -1.05, 2, 1.05, 2, 3.15, 2],
-  size: [0.57, 0.75],
-  slope: [0.31, -0.64],
-  ceiling: 11.55,
-}
+export const dockWindow = {
+  panes: [-5.2, 1.88, -2.51, 1.59, 0.28, 1.56, 3.08, 1.9],
+  size: [0.95, 1.16],
+  slope: [0.36, -0.65],
+  ceiling: 11.56,
+  grid: [-7.9, -8.17, 0.4, 0.21],
+  density: 0.31,
+} as const satisfies WindowLight
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string) {
   const shader = gl.createShader(type)
@@ -112,6 +131,8 @@ export function createVolumePass() {
   const sizeLocation = gl.getUniformLocation(program, 'paneSize')
   const slopeLocation = gl.getUniformLocation(program, 'lightSlope')
   const ceilingLocation = gl.getUniformLocation(program, 'ceiling')
+  const grilleLocation = gl.getUniformLocation(program, 'grille')
+  const densityLocation = gl.getUniformLocation(program, 'density')
   const viewLocation = gl.getUniformLocation(program, 'viewToWorld')
   const projectionLocation = gl.getUniformLocation(program, 'projectionInverse')
 
@@ -128,6 +149,8 @@ export function createVolumePass() {
       gl.uniform2fv(sizeLocation, window.size)
       gl.uniform2fv(slopeLocation, window.slope)
       gl.uniform1f(ceilingLocation, window.ceiling)
+      gl.uniform4fv(grilleLocation, window.grid)
+      gl.uniform1f(densityLocation, window.density)
       gl.uniformMatrix4fv(viewLocation, false, camera.matrixWorld.elements)
       gl.uniformMatrix4fv(projectionLocation, false, camera.projectionMatrixInverse.elements)
       gl.drawArrays(gl.TRIANGLES, 0, 3)

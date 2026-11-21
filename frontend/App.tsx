@@ -134,6 +134,10 @@ export default function App() {
           {concept && (
             <div className="controls">
               <div className="metric"><span>模型三角面</span><output>{triangles?.toLocaleString('zh-CN') ?? '加载中'}</output></div>
+              {concept.id === 'docks' && (
+                <label className="toggle"><span>GLSL 体积光</span><input type="checkbox" checked={options.volume}
+                  onChange={event => update({ volume: event.target.checked })} /></label>
+              )}
               <label className="toggle"><span>对照概念图</span><input type="checkbox" checked={compare}
                 onChange={event => {
                   if (event.target.checked) runtime.current?.resetCamera()

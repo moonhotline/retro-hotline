@@ -54,11 +54,38 @@ export function publicAtrium(root: Group, span: number, front: number, height: (
   }
   batch(root,slabs,textured(finish(wood?0xbd9873:0xa29380,.57,.14),58,wood?'wood':'stone',.04),'Visible mezzanine slabs and soffits')
   batch(root,lines,finish(0xfcc582,.3,.1,0xffb96d,3.4),'Recessed amber mezzanine light lines')
+  const details = []
+  const glazingLights = []
+  const ledNoses = []
+  for (const side of [-1,1]) {
+    for (let i = 0; i < 9; i++) {
+      const x = side * (3.7 + i * (span - 4.8) / 8)
+      const z = front - 3.4 - i % 3 * 1.64
+      const height = wood ? .67 : .73
+      if (wood) {
+        details.push(strut([x-.42,height,z],[x+.43,height,z],.47,.045,23,18))
+        details.push(capsule([x,.04,z],[x,height-.05,z],.092,20,13))
+        details.push(strut([x-.28,.39,z-.74],[x+.28,.39,z-.74],.27,.08,24,16))
+      } else {
+        details.push(strut([x-.42,.36,z],[x+.43,.36,z],.36,.30,24,12))
+        details.push(strut([x-.49,3.06,z-.86],[x+.48,3.06,z-.86],.34,.20,24,12))
+      }
+      glazingLights.push(capsule([x-.26,wood ? 3.65 : 5.26,front-1.55],
+        [x+.26,wood ? 3.65 : 5.26,front-1.55],.035,24,20))
+    }
+  }
+  batch(root,details,finish(wood ? 0x786746 : 0x68615a,.54,.19),
+    wood ? 'Timber cafe tables and bench seating' : 'Terraced interior planter bases')
+  batch(root,glazingLights,finish(0xf5b977,.37,.24,0xffc387,3.4),'Suspended lights behind the entrance glazing')
+
   const stairs = []
   for (let i = 0; i < 17; i++) {
     const z=front-2.8-i*.36
-    stairs.push(strut([-2.14,.13+i*.143,z],[2.14,.13+i*.143,z],.19,.08,28,22))
+    const y = .13 + i * .143
+    stairs.push(strut([-2.14,y,z],[2.14,y,z],.19,.08,28,22))
+    if (!wood) ledNoses.push(capsule([-2.13,y+.039,z+.164],[2.13,y+.039,z+.164],.012,19,17))
   }
+  if (ledNoses.length) batch(root,ledNoses,finish(0xeac38d,.44,.16,0xffc683,1.8),'Soft lighting along each stair nosing')
   batch(root,stairs,finish(0xbda28a,.44,.11,0x9e5f2a,.26),'Broad central interior stair')
   for (const x of [-7,-3,3,7]) interiorLight(root,x,2.6,front-1.9,62)
   for (const x of [-7.3,0,7.3]) interiorLight(root,x,5.0,front-5.8,38)

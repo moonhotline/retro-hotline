@@ -2,7 +2,7 @@ import {
   DataTexture, EquirectangularReflectionMapping, FloatType, LinearFilter, LinearMipmapLinearFilter,
   MeshStandardNodeMaterial, RedFormat, RepeatWrapping, RGBAFormat, type MeshStandardMaterial,
 } from 'three/webgpu'
-import { color, mix, positionWorld, smoothstep, texture, vec2 } from 'three/tsl'
+import { bumpMap, color, mix, positionWorld, smoothstep, texture, uv, vec2 } from 'three/tsl'
 
 export function seeded(seed: number) {
   return () => {
@@ -49,8 +49,69 @@ export function industrialSurface(base: string, stain: string, seed: number, met
   const wash = texture(albedo, worldUV).r
   const drip = texture(albedo, worldUV.mul(vec2(3.7, .56)).add(.31)).r
   const field = wash.mul(.69).add(drip.mul(.31))
-  material.colorNode = mix(color(base), color(stain), smoothstep(.17,.69,field))
-  material.roughnessNode = field.mul(.31).add(.32)
+  const grain = texture(albedo, worldUV.mul(17.4).add(.531)).r
+  const chips = smoothstep(.47, .67, texture(albedo, worldUV.mul(4.35)).r).mul(grain)
+  material.colorNode = mix(color(base), color(stain), smoothstep(.16,.72,field))
+    .mul(grain.mul(.29).add(.86)).mul(chips.mul(.35).oneMinus())
+  material.roughnessNode = field.mul(.28).add(grain.mul(.18)).add(.33)
+  material.normalNode = bumpMap(grain.add(chips.mul(.4)), .042)
+  return material
+}
+
+// The atlas has short directional gouges and clustered point abrasion. Point
+// abrasion breaks up wear around plate seams without drawing uninterrupted lines.
+function abrasionMap(seed: number) {
+  const random = seeded(seed)
+  const size = 512
+  const pixels = new Uint8Array(size * size)
+  const write = (x: number, y: number, value: number) => {
+    const index = ((y + size) % size) * size + (x + size) % size
+    pixels[index] = Math.max(value, pixels[index]!)
+  }
+  for (let i = 0; i < 920; i++) {
+    const x = Math.floor(random() * size)
+    const y = Math.floor(random() * size)
+    const length = 2 + Math.floor(random() ** 3 * 45)
+    const angle = i % 3 === 0 ? random() * Math.PI : .25 + (random() - .5) * .9
+    const strength = 39 + Math.floor(random() * 200)
+    for (let j = 0; j < length; j++) {
+      const px = x + Math.round(Math.cos(angle) * j)
+      const py = y + Math.round(Math.sin(angle) * j)
+      write(px, py, Math.floor(strength * Math.sin((j + .7) / (length + .4) * Math.PI)))
+    }
+  }
+  for (let i = 0; i < 10000; i++) {
+    write(Math.floor(random() * size), Math.floor(random() * size), Math.floor(random() * 125))
+  }
+  const atlas = new DataTexture(pixels, size, size, RedFormat)
+  atlas.wrapS = atlas.wrapT = RepeatWrapping
+  atlas.magFilter = LinearFilter
+  atlas.minFilter = LinearMipmapLinearFilter
+  atlas.generateMipmaps = true
+  atlas.needsUpdate = true
+  return atlas
+}
+
+export function armorSurface(wide: boolean) {
+  const material = new MeshStandardNodeMaterial({ roughness: .52, metalness: .60, side: 2 })
+  const age = weatherField(wide ? 1337 : 2348)
+  const atlas = abrasionMap(wide ? 419 : 297)
+  material.roughnessMap = age
+  material.bumpMap = atlas
+  const p = positionWorld
+  const patchUV = vec2(p.x.add(p.y.mul(.53)), p.z.sub(p.y.mul(.31)))
+  const dust = texture(age, patchUV.mul(.44)).r
+  const steelGrain = texture(age, patchUV.mul(8.4)).r
+  const scratches = texture(atlas, patchUV.mul(1.6)).r
+  const edgeChips = smoothstep(.34,.61, texture(age,uv().mul(vec2(4.2,1.68))).r)
+    .mul(smoothstep(.018,.085,uv().y).oneMinus())
+  const wear = edgeChips.mul(.74).add(scratches.mul(.62)).clamp()
+  const paint = mix(color(wide ? '#444633' : '#313a3e'), color(wide ? '#65634b' : '#505859'), dust)
+  material.colorNode = mix(paint, color(wide ? '#9b9681' : '#939d9f'), wear)
+    .mul(steelGrain.mul(.31).add(.83))
+  material.metalnessNode = mix(.45, .86, wear)
+  material.roughnessNode = mix(dust.mul(.27).add(.41), .33, wear)
+  material.normalNode = bumpMap(steelGrain.mul(.54).sub(scratches.mul(.65)), .025)
   return material
 }
 

@@ -44,7 +44,7 @@ export function orchard() {
     }
   }
   batch(root,chassis,finish(0x343b42,.47,.48),'Glazing mullions and structural columns in depth')
-  batch(root,partitions,finish(0x58463a,.84,.05,0x583013,.36),'Warm room partitions behind glazing')
+  batch(root,partitions,finish(0x54473d,.76,.07,0x6d451f,.38),'Warm room partitions behind glazing')
   const doors = [.62,.636,.652,.668,.684].map(u => capsule(around(u,0,-.09),around(u,2.53,-.09),.039,42,28))
   batch(root,doors,finish(0x675444,.37,.7),'Bronze gallery entrance framing')
   for (const u of [.38,.54,.64,.76,.91]) {
@@ -53,12 +53,12 @@ export function orchard() {
   }
 
   const trees = [
-    [-6.3,15.8,5.5],[-10.8,4.3,3.85],[-6.2,1.2,4.17],[-2.6,.8,3.47],[.72,-2,4.3],
+    [-6.04,15.3,6.1],[-10.8,4.3,3.85],[-6.2,1.2,4.17],[-2.6,1.55,3.47],[.72,-1,4.3],
     [4.4,1,3.03],[9.8,2.8,3.14],[-12.7,1,3.63],[-14.1,-1.6,3.62],[-3.4,-4.6,3.65],
     [15.6,11.2,3.8],[15.8,17.7,3.3],[-4.95,-5.1,2.9],
   ] as const
-  const beds: Point[] = [[-.62,1.15,14.9],[-1.47,1.02,12.3],[-.87,1.25,10.3],[-2.2,1.10,7.55],
-    [-4.3,1.25,4.03],[8.9,1.25,14.1],[8.2,.97,10],[7.1,1.05,8.4],[7.85,1.08,17.3]]
+  const beds: Point[] = [[-.62,1.15,14.9],[-.19,1.18,12.3],[.88,1.25,10.3],[1.15,1.25,7.55],
+    [-.46,1.25,4.03],[8.9,1.39,14.1],[8.2,1.28,10],[7.1,1.18,8.4],[8.3,1.34,17.3],[2.15,1.0,15.95],[6.6,1.55,18.7]]
   landscape(root,trees,beds,[[4.5,.68,16],[4.75,.64,12],[4.5,.63,8],[4.2,.63,4],
     [7.86,.64,13],[8.27,.59,16]],6722)
   batch(root,[ribbon(Array.from({length:65},(_,i)=> {
@@ -73,6 +73,6 @@ export function orchard() {
   moon.colorNode = mix(color('#aab4c0'),color('#ecf5ff').mul(2.4),
     sin(uv().x.mul(29).add(sin(uv().y.mul(38)).mul(1.4))).mul(.16).add(.82))
   batch(root,[new SphereGeometry(.85,128,72).translate(-10.8,23.7,-40)],moon,'Moon disk')
-  lightHalos(root,[[-10.8,23.7,-39.13]],3.15,'#9fb8d3',.26)
+  lightHalos(root,[[-5.15,22.0,-39.13]],3.15,'#9fb8d3',.26)
   return root
 }

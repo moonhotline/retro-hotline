@@ -38,11 +38,11 @@ export function createConceptStage(concept: Concept, buildModel: ModelFactory) {
   const isDocks = concept.id === 'docks'
   const isSquare = concept.id === 'square'
   const isGate = concept.id === 'gate'
-  const sky = machineStage ? 0x151f23 : isSphere ? 0x241b38 : isGate ? 0x465462 : 0x182536
+  const sky = machineStage ? 0x131a1d : isSphere ? 0x292239 : isGate ? 0x414953 : 0x253647
   scene.background = new Color(sky)
-  scene.fog = machineStage ? new Fog(0x10181c, 10, 27) : new Fog(sky, isGate ? 15 : 28, isGate ? 83 : 124)
+  scene.fog = machineStage ? new Fog(0x131a1d, 10, 26) : new Fog(sky, isGate ? 17 : isSquare ? 24 : 34, isGate ? 92 : isSquare ? 104 : 127)
   const probe = environment(machineStage || isDocks, isSphere)
-  scene.environmentIntensity = machineStage ? 0.53 : 0.48
+  scene.environmentIntensity = machineStage ? .50 : isDocks ? .27 : .45
   scene.add(skyDome(concept.id))
   camera.position.fromArray(concept.camera)
   camera.lookAt(concept.target[0], concept.target[1], concept.target[2])
@@ -56,15 +56,16 @@ export function createConceptStage(concept: Concept, buildModel: ModelFactory) {
   floor.position.y = -0.045
   floor.receiveShadow = machineStage
   scene.add(floor, groundPass.anchor,
-    new HemisphereLight(0x96b8e8, 0x4c3427, machineStage ? 0.55 : 0.65),
-    new AmbientLight(0x839bb5, 0.14))
-  const key = new DirectionalLight(machineStage ? 0xffd5a2 : isDocks || isGate ? 0xffbd7c : 0xdce7ff,
-    machineStage ? (concept.id === 'bug' ? 2.25 : 2.75) : isDocks ? 0.42 : 1.12)
-  key.position.set(machineStage ? -3 : -6, 8, 8)
+    new HemisphereLight(0xabc3da, 0x4c3427, machineStage ? .64 : isDocks ? .22 : .53),
+    new AmbientLight(0x9caabc, machineStage ? .16 : .085))
+  const key = new DirectionalLight(machineStage ? (concept.id === 'bug' ? 0xffd6a7 : 0xffe7cf) :
+    isDocks ? 0xffd2a1 : isGate ? 0xc5d3e1 : 0xdce8ff,
+  machineStage ? (concept.id === 'bug' ? 2.75 : 2.6) : isDocks ? .33 : isGate ? .81 : 1.10)
+  key.position.set(machineStage ? -4.8 : -6, machineStage ? 7.2 : 8, machineStage ? 4.3 : 8)
   if (machineStage) {
     key.castShadow = true
-    key.shadow.mapSize.set(1024, 1024)
-    key.shadow.normalBias = 0.016
+    key.shadow.mapSize.set(1536, 1536)
+    key.shadow.normalBias = 0.011
     key.shadow.bias = -0.0002
     key.shadow.radius = 2
     Object.assign(key.shadow.camera, { left: -6, right: 6, bottom: -5, top: 5, near: 0.4, far: 22 })
@@ -72,12 +73,17 @@ export function createConceptStage(concept: Concept, buildModel: ModelFactory) {
       if (object instanceof Mesh) object.castShadow = object.receiveShadow = true
     })
   }
-  const rim = new DirectionalLight(machineStage ? 0x54ceea : 0x8eb1ef, machineStage ? 1.18 : 1.15)
+  const rim = new DirectionalLight(machineStage ? 0x54ceea : 0x8eb1ef, machineStage ? .94 : isDocks ? .38 : 1.05)
   rim.position.set(3, 5, -7)
   scene.add(key, rim)
+  if (machineStage) {
+    const fill = new DirectionalLight(0xffdfbd, .86)
+    fill.position.set(-2.3, 4.9, 7.5)
+    scene.add(fill)
+  }
   if (isDocks || isGate || isSquare || machineStage || isSphere) {
     const accent = new PointLight(isSquare ? 0xff2048 : concept.id === 'craw' ? 0x3fdae9 : 0xffad54,
-      machineStage ? 12 : isDocks ? 145 : 280, 0, 2)
+      machineStage ? 3.6 : isDocks ? 26 : isGate ? 110 : 175, 0, 2)
     accent.position.copy(machineStage ? new Vector3(3, 2.3, 3) : new Vector3(-4, 5.5, -4))
     scene.add(accent)
   }
