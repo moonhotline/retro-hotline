@@ -74,7 +74,7 @@ export const labWindow: WindowLight = {
 export const dockWindow: WindowLight = {
   panes: [-3.15, 2, -1.05, 2, 1.05, 2, 3.15, 2],
   size: [0.57, 0.75],
-  slope: [0.03, -0.64],
+  slope: [0.31, -0.64],
   ceiling: 11.55,
 }
 

@@ -1,63 +1,45 @@
-import {
-  DataTexture, Group, LinearFilter, LinearMipmapLinearFilter, RedFormat, RepeatWrapping,
-  Vector3,
-} from 'three/webgpu'
+import { Group, Vector3 } from 'three/webgpu'
 import { ring } from './cutaway.js'
-import { batch, finish, patch, ribbon, strut, type Point } from './geometry'
+import { batch, capsule, finish, patch, plating, ribbon, strut, type Point } from './geometry'
+import { industrialSurface, textured } from './surfaces'
 
-function toolmarks() {
-  const size = 256
-  const data = new Uint8Array(size * size)
-  let state = 378915
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
-      const scratch = 1.4 * y + 0.16 * x + 4.5 * Math.sin(x / 26)
-      data[y * size + x] = 128 + (state >>> 26) / 3 + (Math.sin(scratch) > 0.987 ? 22 : 0)
-    }
-  }
-  const map = new DataTexture(data, size, size, RedFormat)
-  map.magFilter = LinearFilter
-  map.minFilter = LinearMipmapLinearFilter
-  map.generateMipmaps = true
-  map.wrapS = map.wrapT = RepeatWrapping
-  map.needsUpdate = true
-  return map
-}
+const spiderShell = [
+  [[-0.66,.61,-0.92],[0.58,.66,-.91],[0.86,.57,-.39],[.68,.66,.44],[-.68,.64,.52],[-.92,.52,-.30]],
+  [[-.69,.62,.56],[.67,.65,.47],[.88,.47,.82],[.65,.32,1.16],[-.65,.33,1.17],[-.86,.51,.84]],
+  [[.68,.62,.43],[.89,.56,-.39],[1.18,.28,-.56],[1.37,.15,.49],[.88,.39,.92]],
+  [[-.69,.60,.49],[-.93,.48,-.30],[-1.31,.22,-.50],[-1.34,.13,.49],[-.89,.42,.95]],
+  [[-1.18,.25,-.58],[-.62,.60,-.95],[.57,.65,-.94],[1.17,.22,-.57],[.69,.23,-1.39],[-.66,.18,-1.38]],
+] as const satisfies readonly (readonly Point[])[]
+
+const bugShell = [
+  [[-.07,.98,-1.04],[-1.10,.56,-.56],[-.99,.39,.39],[-.56,.28,1.08],[.028,.085,1.66]],
+  [[-.04,.98,-1.04],[.064,.085,1.66],[.78,.32,.87],[1.08,.51,-.27]],
+  [[-1.06,.52,-.63],[-1.70,.30,-.42],[-1.91,.00,.34],[-1.41,-.08,1.04],[-.63,.26,1.04],[-1.11,.40,.30]],
+  [[1.14,.49,-.36],[1.73,.32,-.40],[1.85,-.02,.27],[1.44,-.05,1.08],[.78,.33,.82]],
+  [[-.08,.95,-1.06],[1.15,.61,-.51],[1.46,.28,-.85],[.94,.38,-1.60],[-.78,.40,-1.64],[-1.42,.26,-.94]],
+] as const satisfies readonly (readonly Point[])[]
 
 export function machine(wide: boolean) {
   const root = new Group()
-  const armor = finish(wide ? 0x787756 : 0x465458, 0.34, 0.69)
-  armor.bumpMap = toolmarks()
-  armor.bumpScale = 0.022
-  const housing = finish(wide ? 0x414940 : 0x252e33, 0.44, 0.62)
-  const joint = finish(0x889192, 0.29, 0.8)
-  const black = finish(0x202826, 0.61)
-  const accent = wide ? 0xff921e : 0x32e9f8
-  const sensor = finish(accent, 0.21, 0.25, accent, 2.4)
-  const level = wide ? 1.19 : 2.14
+  const armor = industrialSurface(wide ? '#56553a' : '#3c454a', wide ? '#777150' : '#60696e', 65, 0.58)
+  textured(armor, 733, 'metal', 0.008)
+  const housing = textured(finish(0x292a28, 0.53, 0.55), 562, 'metal', 0.015)
+  const joint = finish(0x777979, 0.28, 0.76)
+  const black = finish(0x14171a, 0.67)
+  const accent = wide ? 0xff8a18 : 0x0f9fc0
+  const sensor = finish(accent, 0.26, 0.25, accent, 2.9)
+  const level = wide ? 0.88 : 2.0
 
-  batch(root, [patch((u, v) => {
-    const a = u * Math.PI * 2
-    const r = Math.sin(Math.PI * v)
-    return [Math.cos(a) * r * (wide ? 1.48 : 1.0), level + 0.49 * Math.cos(v * Math.PI),
-      Math.sin(a) * r * (wide ? 1.49 : 1.15)]
-  }, 192, 82)], black, 'Core')
+  batch(root, [plating([
+    [-1.02,level + .24,-.82],[1.02,level + .24,-.82],[1.13,level + .19,.61],
+    [.70,level + .18,1.13],[-.68,level + .18,1.13],[-1.13,level + .2,.58],
+  ], wide ? 0.58 : 0.72, 25)], black, 'Armored drive chassis')
 
-  const count = wide ? 6 : 5
-  const shells = Array.from({ length: count }, (_, segment) => patch((u, v) => {
-    const angle = (segment + 0.018 + 0.964 * u) * Math.PI * 2 / count + Math.PI / 2
-    const nose = wide ? 0.12 * Math.sin(angle) : 0.06 * Math.sin(angle)
-    const roll = Math.sin(Math.PI * v * 0.52)
-    const bevel = 0.047 * Math.pow(Math.sin(Math.PI * u), 0.35)
-    const ridge = Math.abs(Math.sin(angle * (wide ? 3 : 2.5))) * 0.12 * v
-    return [
-      Math.cos(angle) * roll * (wide ? 1.76 : 1.16),
-      level + (wide ? 0.85 : 0.67) * (1 - Math.pow(v, 1.65)) + nose + bevel - ridge,
-      Math.sin(angle) * roll * (wide ? 1.68 : 1.26),
-    ]
-  }, 88, 70))
-  const plates = shells.map((shell, i) => batch(root, [shell], armor, `Backplate ${i + 1}`))
+  const design = wide ? bugShell : spiderShell
+  const count = design.length
+  const plates = design.map((outline, i) => batch(root, [plating(
+    outline.map(([x, y, z]) => [x, y + level, z]), wide ? .20 : .23, 26,
+  )], armor, `Bevelled armor ${i + 1}`))
   const debris = new Group()
   debris.name = 'Core rupture'
   const hot = finish(accent, 0.28, 0.48, accent, 3.2)
@@ -75,46 +57,71 @@ export function machine(wide: boolean) {
   })
   debris.visible = false
   root.add(debris)
-  const edge = (wide ? 1.38 : 0.96)
-  batch(root, [strut([-edge, level + 0.01, 0.72], [edge, level + 0.01, 0.72], 0.27, 0.31)], housing, 'Optics housing')
-  const lensWidth = wide ? 0.35 : 0.62
-  const lensSections = wide ? [-0.64, 0.64] : [0]
-  batch(root, lensSections.map(x => strut(
-    [x - lensWidth / 2, level + 0.065, wide ? 1.52 : 1.23],
-    [x + lensWidth / 2, level + 0.065, wide ? 1.52 : 1.23], 0.066, 0.049, 92, 64,
-  )), sensor, 'Sensor strip')
+  const edge = wide ? 0.99 : 0.81
+  const chin = level - (wide ? 0.25 : 0.15)
+  const bezelZ = wide ? 1.35 : 1.19
+  batch(root, [plating([[-edge,chin + .31,bezelZ - .10],[edge,chin + .31,bezelZ - .10],
+    [edge * .88,chin + .26,bezelZ + .18],[-edge * .88,chin + .26,bezelZ + .18]], .23, 28)], housing, 'Recessed optics housing')
+  const cells = wide ? [-0.65,-0.49,0.49,0.65] : [0]
+  batch(root, cells.map(x => capsule(
+    [x - (wide ? .033 : .37), chin + .14, bezelZ + .195],
+    [x + (wide ? .033 : .37), chin + .14, bezelZ + .195], wide ? .044 : .040, 58, 90,
+  )), sensor, 'Front sensor optics')
+  if (!wide) {
+    batch(root, [capsule([.36,level + .29,1.157],[.73,level + .32,1.12],.024,58,90)],
+      finish(0xff9b34,.31,.24,0xff821a,3.6), 'Amber identification strip')
+  } else {
+    batch(root, [-1,1].map(side => ribbon([[side*.45,.70,1.1],[side*.54,.46,1.56],[side*.68,.33,1.92]],
+      .048, 68, 40)), joint, 'Pair of forward antennae')
+  }
 
+  const pairs = wide ? 3 : 4
   for (const side of [-1, 1]) {
-    const pairs = wide ? 3 : 4
     for (let leg = 0; leg < pairs; leg++) {
       const offset = leg - (pairs - 1) / 2
-      const hip: Point = [side * (wide ? 1.03 : 0.77), level - 0.18, offset * 0.6]
-      const knee: Point = [side * ((wide ? 1.83 : 2.55) - 0.18 * Math.abs(offset)),
-        wide ? 0.87 : 2.66 - Math.abs(offset) * 0.18, offset * (wide ? 1.04 : 1.21)]
-      const toe: Point = [side * ((wide ? 2.43 : 3.68) - 0.29 * Math.abs(offset)), 0.13,
-        offset * (wide ? 1.36 : 1.69)]
+      const near = leg === pairs - 1
+      const hip: Point = [side * (wide ? 1.13 : 0.94), level - 0.16, offset * 0.56]
+      const knee: Point = [side * ((wide ? 1.86 : 2.04) + (near ? .02 : .18)),
+        wide ? .78 : near ? 2.66 : 2.28 - Math.abs(offset) * .05, offset * (wide ? .92 : 1.15)]
+      const ankle: Point = [side * ((wide ? 2.24 : 2.66) + (near ? -.12 : .11)),
+        wide ? .31 : 1.17, offset * (wide ? 1.16 : 1.45)]
+      const toe: Point = [side * ((wide ? 2.54 : 3.32) + (near ? -.28 : .06)), 0.12,
+        offset * (wide ? 1.36 : 1.80)]
       const legGroup = new Group()
       legGroup.name = `Leg ${side === -1 ? 'L' : 'R'}${leg + 1}`
       root.add(legGroup)
-      const thick = wide ? 0.23 : 0.16
+      const thick = wide ? .175 : .125
       batch(legGroup, [
-        strut(hip, knee, thick, thick * 1.19),
-        strut(knee, toe, thick * 0.72, thick * 0.91),
-      ], armor, 'Segmented limb')
-      const direction = new Vector3(...toe).sub(new Vector3(...knee))
-      const pistonA = new Vector3(...knee).addScaledVector(direction, 0.11).add(new Vector3(-side * 0.21, 0, 0))
-      const pistonB = pistonA.clone().addScaledVector(direction, 0.58)
-      const mid = pistonA.clone().lerp(pistonB, 0.55)
-      batch(legGroup, [strut(pistonA.toArray(), mid.toArray(), 0.074, 0.074)], housing, 'Actuator')
-      batch(legGroup, [strut(mid.toArray(), pistonB.toArray(), 0.045, 0.045)], joint, 'Actuator rod')
-      batch(legGroup, [
-        ring(-0.11, 0.11, 0.12, wide ? 0.22 : 0.19, 0.033, { segs: 360, smooth: 36 })
-          .rotateY(Math.PI / 2).translate(...knee),
-      ], joint, 'Bearing collar')
-      batch(legGroup, [ribbon([hip, [side * 1.25, level - 0.22, hip[2] + 0.15],
-        [knee[0] - side * 0.12, knee[1] - 0.11, knee[2]]], 0.067)], black, 'Hydraulic line')
-      batch(legGroup, [strut([toe[0], toe[1] - 0.035, toe[2] - 0.19],
-        [toe[0], toe[1] - 0.035, toe[2] + 0.16], 0.16, 0.09)], housing, 'Foot')
+        strut(hip, knee, thick, thick * 1.54, 62, 36),
+        strut(knee, ankle, thick * .83, thick * 1.31, 58, 40),
+        strut(ankle, toe, thick * .62, thick * .90, 56, 40),
+      ], armor, 'Three armor links')
+      const bearings = [hip, knee, ankle].map((node, i) =>
+        ring(-0.16, 0.16, .054, (i === 1 ? .206 : .168) * (wide ? 1.11 : 1), .034, { segs: 128, smooth: 37 })
+          .rotateY(Math.PI * (0.42 + offset * .064)).translate(...node))
+      batch(legGroup, bearings, joint, 'Flanged bearings at hip, knee and ankle')
+
+      const linkPairs = [[hip, knee], [knee, ankle]] as const
+      const pistons = linkPairs.map(([from, to]) => {
+        const start = new Vector3(...from).lerp(new Vector3(...to), .14)
+        const end = new Vector3(...from).lerp(new Vector3(...to), .90)
+        const setback = new Vector3(-side * .10, -0.11, .14)
+        start.add(setback)
+        end.add(setback)
+        return { start, end, middle: start.clone().lerp(end, .56) }
+      })
+      batch(legGroup, pistons.map(piston => capsule(piston.start.toArray(), piston.middle.toArray(), .086, 62, 42)),
+        housing, 'Dark hydraulic sleeves')
+      batch(legGroup, pistons.map(piston => capsule(piston.middle.toArray(), piston.end.toArray(), .049, 62, 42)),
+        joint, 'Exposed chrome piston rods')
+      batch(legGroup, [ribbon([
+        hip, [hip[0] + side * .15,hip[1] - .23,hip[2] + .13],
+        [knee[0] - side * .42,knee[1] - .27,knee[2] + .11], knee,
+      ], .032, 100, 54)], black, 'Exposed hydraulic hose')
+      const [x,y,z] = toe
+      const w = wide ? .21 : .18
+      batch(legGroup, [plating([[x-w,y,z-.25],[x+w,y,z-.25],[x+w*1.2,y,z+.20],
+        [x+w*.78,y,z+.30],[x-w*.78,y,z+.30],[x-w*1.2,y,z+.20]], .15, 22)], housing, 'Chamfered foot pad')
     }
   }
   function poseRupture(elapsed: number) {

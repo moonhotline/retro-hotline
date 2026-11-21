@@ -1,6 +1,6 @@
 import {
   BufferAttribute, BufferGeometry, CatmullRomCurve3, DoubleSide, Mesh,
-  MeshStandardMaterial, TubeGeometry, Vector3, type Material,
+  MeshStandardMaterial, Texture, TubeGeometry, Vector3, type Material,
   type Object3D,
 } from 'three/webgpu'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
@@ -102,7 +102,54 @@ export function disposeMeshes(root: Object3D) {
   })
   geometries.forEach(geometry => geometry.dispose())
   materials.forEach(material => {
-    if (material instanceof MeshStandardMaterial) material.bumpMap?.dispose()
+    if ('map' in material && material.map instanceof Texture) material.map.dispose()
+    if ('bumpMap' in material) {
+      const standard = material as MeshStandardMaterial
+      standard.bumpMap?.dispose()
+      standard.roughnessMap?.dispose()
+    }
     material.dispose()
   })
+}
+
+// The outline describes the outer skin in cyclic order. Recessed loops give each
+// plate a readable bevel and a closed, shadow-casting edge.
+export function plating(outline: readonly Point[], thickness: number, segments = 26) {
+  const vertices = outline.map(p => new Vector3(...p))
+  const center = vertices.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(vertices.length)
+  const top = vertices.map(point => center.clone().lerp(point, 0.93))
+  const bottom = vertices.map(point => center.clone().lerp(point, 0.94).add(new Vector3(0, -thickness, 0)))
+  const topCentroid = top.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(top.length)
+  const bottomCentroid = topCentroid.clone().add(new Vector3(0, -thickness, 0))
+  const surfaces: BufferGeometry[] = []
+  for (let i = 0; i < vertices.length; i++) {
+    const j = (i + 1) % vertices.length
+    const skin = (a: Vector3, b: Vector3, tip: Vector3) => patch((u, v) =>
+      a.clone().lerp(b, u).lerp(tip, v).toArray(), segments, segments)
+    const band = (a: Vector3, b: Vector3, c: Vector3, d: Vector3) => patch((u, v) =>
+      a.clone().lerp(b, u).lerp(c.clone().lerp(d, u), v).toArray(), segments, 4)
+    surfaces.push(
+      skin(top[i]!, top[j]!, topCentroid), skin(bottom[j]!, bottom[i]!, bottomCentroid),
+      band(vertices[i]!, vertices[j]!, top[i]!, top[j]!),
+      band(bottom[i]!, bottom[j]!, vertices[i]!, vertices[j]!),
+    )
+  }
+  const geometry = mergeGeometries(surfaces)
+  surfaces.forEach(surface => surface.dispose())
+  return geometry
+}
+
+export function capsule(a: Point, b: Point, radius: number, radial = 48, lengthwise = 34) {
+  const start = new Vector3(...a)
+  const end = new Vector3(...b)
+  const n = end.clone().sub(start).normalize()
+  const u = new Vector3(0, Math.abs(n.y) > 0.94 ? 0 : 1, Math.abs(n.y) > 0.94 ? 1 : 0).cross(n).normalize()
+  const v = n.clone().cross(u).normalize()
+  return patch((s, t) => {
+    const angle = s * Math.PI * 2
+    const shoulder = Math.min(1, t * 10 + 0.01, (1 - t) * 10 + 0.01)
+    return start.clone().lerp(end, t)
+      .addScaledVector(u, Math.cos(angle) * radius * shoulder)
+      .addScaledVector(v, Math.sin(angle) * radius * shoulder).toArray()
+  }, radial, lengthwise)
 }
