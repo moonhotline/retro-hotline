@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    alias: [{ find: /^three$/, replacement: 'three/webgpu' }],
     dedupe: ['react', 'react-dom', 'react-is'],
   },
   test: {
