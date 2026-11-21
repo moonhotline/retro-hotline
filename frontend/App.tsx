@@ -12,6 +12,7 @@ function textField(target: EventTarget | null) {
 export default function App() {
   const [options, setOptions] = useState(initial)
   const [home, setHome] = useState(true)
+  const [motionPaused, setMotionPaused] = useState(false)
   const [force, setForce] = useState(false)
   const [backend, setBackend] = useState<string | null>(null)
   const [triangles, setTriangles] = useState<number | null>(null)
@@ -68,7 +69,12 @@ export default function App() {
   }
 
   if (showHome) {
-    return <Home onEnterGame={() => setHome(false)} onEnterLab={() => update({ dev: true })} />
+    return <Home
+      onEnterGame={() => setHome(false)}
+      onEnterLab={() => update({ dev: true })}
+      motionPaused={motionPaused}
+      onToggleMotion={() => setMotionPaused(value => !value)}
+    />
   }
 
   const concept = concepts.find(item => item.id === options.display)

@@ -63,17 +63,17 @@
   88% { transform: translateX(460%) skewX(-22deg); opacity: 0.9; }
   100% { transform: translateX(460%) skewX(-22deg); opacity: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .home .home-enter::after { animation: none; }
-  .home .home-enter:hover { transform: none; }
-}
+.home[data-motion-paused='true'] .home-enter::after { animation-play-state: paused; }
+.home[data-motion-paused='true'] .home-enter:hover { transform: none; }
 .home kbd { background: #0b1626; border-color: #516980; color: #edf7ff; }
 .home-sound {
   position: absolute;
   bottom: max(22px, env(safe-area-inset-bottom));
   left: clamp(24px, 7vw, 100px);
+  right: clamp(24px, 7vw, 100px);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   font-size: 13px;
 }
