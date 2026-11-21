@@ -23,6 +23,7 @@ uniform float u_bpm;
 uniform float u_intensity;
 uniform float u_reveal;
 uniform float u_surge;
+uniform float u_spin;
 
 const float PI = 3.14159265359;
 
@@ -128,7 +129,7 @@ void main() {
   vec2 p2 = uv - prismPos;
 
   // Gentle 3D-like faceted tilt (keeps the iconic crystal triangle razor-sharp, never turning sideways)
-  float tilt = sin(t * 0.55) * 0.055 + u_pointer.x * 0.06;
+  float tilt = sin(t * 0.55) * 0.055 + u_pointer.x * 0.06 + u_spin * 0.08;
   vec2 pt = rot2(tilt) * p2;
   // Back-depth offset creates true 3D crystal thickness / chamfered rear edge
   vec2 depthOff = vec2(0.042 + sin(t * 0.72) * 0.014 + u_pointer.x * 0.024, 0.022 + cos(t * 0.62) * 0.010 - u_pointer.y * 0.016) * (prismScale / 0.245);
@@ -422,8 +423,18 @@ function drawFallback2D(
 }
 
 /** GSAP-choreographed WebGL optical crystal prism & liquid spectrum atmosphere. */
-export function MistAtmosphere() {
+export function MistAtmosphere({ energyBoost }: { energyBoost: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const hover = useRef({ amount: 0 })
+
+  useEffect(() => {
+    const tween = gsap.to(hover.current, {
+      amount: energyBoost ? 1 : 0,
+      duration: energyBoost ? 0.55 : 0.85,
+      ease: energyBoost ? 'expo.out' : 'power3.out',
+    })
+    return () => { tween.kill() }
+  }, [energyBoost])
 
   useEffect(() => {
     const host = hostRef.current
@@ -461,6 +472,7 @@ export function MistAtmosphere() {
     let uIntensity: WebGLUniformLocation | null = null
     let uReveal: WebGLUniformLocation | null = null
     let uSurge: WebGLUniformLocation | null = null
+    let uSpin: WebGLUniformLocation | null = null
 
     try {
       gl = canvas.getContext('webgl', {
@@ -490,6 +502,7 @@ export function MistAtmosphere() {
           uIntensity = gl.getUniformLocation(program, 'u_intensity')
           uReveal = gl.getUniformLocation(program, 'u_reveal')
           uSurge = gl.getUniformLocation(program, 'u_surge')
+          uSpin = gl.getUniformLocation(program, 'u_spin')
         } else {
           gl.getExtension('WEBGL_lose_context')?.loseContext()
           gl = null
@@ -509,6 +522,7 @@ export function MistAtmosphere() {
       driftX += (pointerX - driftX) * 0.08
       driftY += (pointerY - driftY) * 0.08
       const intensity = 1.06
+      const boost = motion.matches ? 0 : hover.current.amount
 
       if (gl && program) {
         gl.viewport(0, 0, canvas.width, canvas.height)
@@ -518,7 +532,8 @@ export function MistAtmosphere() {
         if (uBpm) gl.uniform1f(uBpm, 105)
         if (uIntensity) gl.uniform1f(uIntensity, intensity)
         if (uReveal) gl.uniform1f(uReveal, rig.reveal)
-        if (uSurge) gl.uniform1f(uSurge, rig.surge)
+        if (uSurge) gl.uniform1f(uSurge, Math.max(rig.surge, boost * 0.82))
+        if (uSpin) gl.uniform1f(uSpin, boost * 0.9)
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
       } else if (ctx2d) {
         drawFallback2D(ctx2d, width, height, elapsed, driftX * 16, driftY * 10, intensity)
@@ -526,7 +541,7 @@ export function MistAtmosphere() {
     }
 
     const tick = (now: number) => {
-      const dt = previous ? Math.min((now - previous) / 1000, 0.05) : 0.016
+      const dt = previous ? (now - previous) / 1000 : 0.016
       previous = now
       elapsed += dt
       draw()
