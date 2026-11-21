@@ -6,6 +6,7 @@ export function Home({ onEnterGame, onEnterLab }: { onEnterGame: () => void; onE
   const music = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [prismBoost, setPrismBoost] = useState(false)
 
   useEffect(() => {
     const track = music.current
@@ -32,11 +33,17 @@ export function Home({ onEnterGame, onEnterLab }: { onEnterGame: () => void; onE
 
   return (
     <main className="home">
-      <MistAtmosphere />
+      <MistAtmosphere energyBoost={prismBoost} />
       <div className="home-content">
         <h1>RETRO<br />HOTLINE</h1>
         <div className="home-actions">
-          <button type="button" className="home-enter" onClick={onEnterGame}>进入主游戏</button>
+          <button type="button" className="home-enter" onClick={onEnterGame}
+            onMouseEnter={() => setPrismBoost(true)}
+            onMouseLeave={event => setPrismBoost(event.currentTarget.matches(':focus-visible'))}
+            onFocus={event => setPrismBoost(event.currentTarget.matches(':focus-visible, :hover'))}
+            onBlur={event => setPrismBoost(event.currentTarget.matches(':hover'))}>
+            进入主游戏
+          </button>
           <button type="button" aria-keyshortcuts="P" onClick={onEnterLab}>进入 Dev Lab <kbd>P</kbd></button>
         </div>
       </div>
