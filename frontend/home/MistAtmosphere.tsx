@@ -142,17 +142,7 @@ void main() {
   vec2 entryPt = rot2(-tilt) * vec2(-prismScale * 0.48, -prismScale * 0.06);
   vec2 exitPt  = rot2(-tilt) * vec2( prismScale * 0.48, -prismScale * 0.03);
 
-  // 2. Orbiting Liquid Iridescent Halo Ring sweeping gracefully around the crystal
-  vec2 ringP = rot2(0.28 + sin(t * 0.45) * 0.07) * p2;
-  ringP.y *= 2.95;
-  float rRing = length(ringP);
-  float ringAngle = atan(ringP.y, ringP.x);
-  float ringOrbit = 0.5 + 0.5 * sin(ringAngle * 2.0 - t * 2.4);
-  float ringDist = abs(rRing - prismScale * 1.48);
-  vec3 ringCol = luxurySpectrum(fract(ringAngle / (2.0 * PI) + t * 0.16));
-  col += ringCol * exp(-ringDist * 88.0) * (0.20 + 0.72 * ringOrbit) * u_reveal * (0.85 + u_surge * 0.55);
-
-  // 3. Focused Pearlescent Incident Laser Beam with fast traveling light packets
+  // 2. Focused Pearlescent Incident Laser Beam with fast traveling light packets
   vec2 beamStart = vec2(-0.98 * aspect, -0.22);
   float dBeam = sdSegment(p2, beamStart, entryPt);
   float beamProg = smoothstep(-0.80 * aspect, entryPt.x, p2.x);
@@ -170,7 +160,7 @@ void main() {
   float leftFade = smoothstep(-0.66 * aspect, -0.06 * aspect, uv.x);
   col += incColor * (incCore * 1.35 + incGlow * 0.48 + incMist * 0.20) * mix(0.32, 1.0, leftFade) * revealClip * pulse;
 
-  // 4. Flowing Liquid Volumetric Spectral Dispersion Fan (流光溢彩)
+  // 3. Flowing Liquid Volumetric Spectral Dispersion Fan (流光溢彩)
   vec2 dExit = p2 - exitPt;
   float rExit = length(dExit);
   float fanReveal = smoothstep(rExit * 0.82, rExit * 0.82 + 0.22, u_reveal * 1.38);
@@ -215,7 +205,7 @@ void main() {
     col += (richSpec * 0.62 + vec3(0.25, 0.72, 1.0) * 0.26) * auroraCore * 0.50 * fanMask;
   }
 
-  // 5. Crystal-Clear Obsidian Triangular Glass Prism (Dark transparent interior + razor-sharp iridescent edges)
+  // 4. Crystal-Clear Obsidian Triangular Glass Prism (Dark transparent interior + razor-sharp iridescent edges)
   float outerHalo = exp(-max(dFront, 0.0) * 32.0);
   col += luxurySpectrum(fract(0.55 + pt.y * 1.6 + t * 0.18)) * outerHalo * (0.36 + u_surge * 0.28) * u_reveal * pulse;
 
@@ -281,7 +271,7 @@ void main() {
   vec3 edgeColor = mix(vec3(0.68, 0.94, 1.0), luxurySpectrum(fract(edgeAngle / (2.0 * PI) + t * 0.2)), 0.55);
   col += (edgeColor * 0.95 + vec3(1.0) * edgeGlint * 1.35) * frontEdge * u_reveal * pulse;
 
-  // 6. Entry & Exit Focal Caustic Blooms + Sweeping Anamorphic Flare
+  // 5. Entry & Exit Focal Caustic Blooms + Sweeping Anamorphic Flare
   float dEntryGlow = length(p2 - entryPt);
   float dExitGlow  = length(p2 - exitPt);
   col += vec3(0.75, 0.96, 1.0) * exp(-dEntryGlow * 24.0) * 0.92 * u_reveal * pulse;
@@ -290,7 +280,7 @@ void main() {
   float anamorphic = exp(-abs(p2.y - exitPt.y) * 90.0) * exp(-abs(p2.x - exitPt.x) * max(flareWidth, 1.2));
   col += mix(vec3(0.55, 0.94, 1.0), vec3(1.0, 0.45, 0.86), smoothstep(-0.18, 0.32, p2.x)) * anamorphic * (0.58 + u_surge * 0.58) * u_reveal;
 
-  // 7. Rising Spectrum-Lit Luminous Bokeh Dust (strictly positive brightness, zero dark specks)
+  // 6. Rising Spectrum-Lit Luminous Bokeh Dust (strictly positive brightness, zero dark specks)
   for (int layer = 0; layer < 2; layer++) {
     float scaleG = layer == 0 ? 9.5 : 16.5;
     vec2 drift = vec2(-t * (layer == 0 ? 0.16 : 0.25), -t * (layer == 0 ? 0.09 : 0.15));
@@ -310,7 +300,7 @@ void main() {
     }
   }
 
-  // 8. Left-Side Typography Safe Zone + Cinematic Vignette + Subtle Film Grain
+  // 7. Left-Side Typography Safe Zone + Cinematic Vignette + Subtle Film Grain
   float vignette = smoothstep(1.45, 0.24, length(uv * vec2(0.72, 0.95)));
   col *= mix(0.66, 1.0, vignette);
   float safeVeil = smoothstep(0.02 * aspect, -0.46 * aspect, uv.x);
