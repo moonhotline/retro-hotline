@@ -1,0 +1,8 @@
+Mannequin and six locomotion clips by Quaternius
+Universal Animation Library (Standard)
+https://quaternius.com/packs/universalanimationlibrary.html
+
+CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+This GLB keeps the original skin, mesh, and the six clips used by Dev Lab.
