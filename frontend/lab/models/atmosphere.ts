@@ -1,5 +1,5 @@
 import { BackSide, Group, MeshBasicNodeMaterial, SphereGeometry } from 'three/webgpu'
-import { color, mix, positionWorld, smoothstep, texture, vec2, vec3 } from 'three/tsl'
+import { color, mix, positionLocal, smoothstep, texture, vec2, vec3 } from 'three/tsl'
 import type { ConceptId } from '../catalog'
 import { batch } from './geometry'
 import { weatherField } from './surfaces'
@@ -12,7 +12,7 @@ export function skyDome(id: ConceptId) {
   const gate = id === 'gate'
   const rain = id === 'square'
   const material = new MeshBasicNodeMaterial({ side: BackSide, depthWrite: false, fog: false })
-  const p = positionWorld.normalize()
+  const p = positionLocal.normalize()
   const elevation = smoothstep(-0.045, 0.62, p.y)
   const low = color(studio ? '#11181a' : violet ? '#363045' : dusk ? '#545377' : gate ? '#3e4d5d' : '#203846')
   const high = color(studio ? '#151b1e' : violet ? '#191124' : dusk ? '#203261' : gate ? '#1a2430' : rain ? '#0d2e56' : '#080f18')
