@@ -1,6 +1,7 @@
-import { Group, Vector3 } from 'three/webgpu'
+import { Float32BufferAttribute, Group, Vector3 } from 'three/webgpu'
 import { ring } from './cutaway.js'
-import { batch, capsule, finish, patch, plating, ribbon, strut, type Point } from './geometry'
+import { batch, capsule as makeCapsule, finish, patch as makePatch, plating as makePlating,
+  ribbon as makeRibbon, strut as makeStrut, type Point } from './geometry'
 import { armorSurface, textured } from './surfaces'
 
 const spiderShell = [
@@ -19,7 +20,16 @@ const bugShell = [
   [[-.08,.95,-1.06],[1.15,.61,-.51],[1.46,.28,-.85],[.94,.38,-1.60],[-.78,.40,-1.64],[-1.42,.26,-.94]],
 ] as const satisfies readonly (readonly Point[])[]
 
-export function machine(wide: boolean) {
+export function machine(wide: boolean, detail = 1) {
+  const segments = (count: number) => Math.max(6, Math.round(count * detail))
+  const capsule = (a: Point, b: Point, radius: number, radial: number, length: number) =>
+    makeCapsule(a, b, radius, segments(radial), segments(length))
+  const strut = (a: Point, b: Point, width: number, depth: number, steps = 88, sides = 64) =>
+    makeStrut(a, b, width, depth, segments(steps), segments(sides))
+  const ribbon = (points: readonly Point[], radius: number, steps: number, sides: number) =>
+    makeRibbon(points, radius, segments(steps), segments(sides))
+  const plating = (outline: readonly Point[], thickness: number, count: number) =>
+    makePlating(outline, thickness, segments(count))
   const root = new Group()
   const armor = armorSurface(wide)
   const housing = textured(finish(0x292a28, 0.53, 0.55), 562, 'metal', 0.015)
@@ -59,12 +69,12 @@ export function machine(wide: boolean) {
   const debris = new Group()
   debris.name = 'Core rupture'
   const hot = finish(accent, 0.28, 0.48, accent, 3.2)
-  const core = batch(debris, [patch((u, v) => {
+  const core = batch(debris, [makePatch((u, v) => {
     const longitude = u * Math.PI * 2
     const latitude = v * Math.PI
     return [0.44 * Math.sin(latitude) * Math.cos(longitude), 0.33 * Math.cos(latitude),
       0.38 * Math.sin(latitude) * Math.sin(longitude)]
-  }, 112, 48)], hot, 'Exposed core')
+  }, segments(112), segments(48))], hot, 'Exposed core')
   core.position.y = level + 0.18
   const fragments = Array.from({ length: 7 }, (_, i) => {
     const length = 0.14 + 0.027 * (i % 4)
@@ -99,6 +109,7 @@ export function machine(wide: boolean) {
   }
 
   const pairs = wide ? 3 : 4
+  const legs: { pivot: Vector3; group: Group; phase: number }[] = []
   for (const side of [-1, 1]) {
     for (let leg = 0; leg < pairs; leg++) {
       const offset = leg - (pairs - 1) / 2
@@ -113,6 +124,7 @@ export function machine(wide: boolean) {
       const legGroup = new Group()
       legGroup.name = `Leg ${side === -1 ? 'L' : 'R'}${leg + 1}`
       root.add(legGroup)
+      legs.push({ pivot: new Vector3(...hip), group: legGroup, phase: leg * Math.PI + (side === 1 ? Math.PI : 0) })
       const thick = wide ? .175 : .125
       batch(legGroup, [
         strut(hip, knee, thick, thick * 1.54, 62, 36),
@@ -120,9 +132,18 @@ export function machine(wide: boolean) {
         strut(ankle, toe, thick * .62, thick * .90, 56, 40),
       ], armor, 'Three armor links')
       const bearingAngle = -side * Math.PI * (.37 + offset * .06)
-      const bearings = [hip, knee, ankle].map((node, i) =>
-        ring(-0.16, 0.16, .054, (i === 1 ? .206 : .168) * (wide ? 1.11 : 1), .034, { segs: 108, smooth: 30 })
-          .rotateY(bearingAngle).translate(...node))
+      const bearings = [hip, knee, ankle].map((node, i) => {
+        const collar = ring(-0.16, 0.16, .054, (i === 1 ? .206 : .168) * (wide ? 1.11 : 1), .034,
+          { segs: segments(108), smooth: segments(30) })
+        const vertices = collar.getAttribute('position')
+        const coordinates = new Float32Array(vertices.count * 2)
+        for (let vertex = 0; vertex < vertices.count; vertex++) {
+          coordinates[vertex * 2] = Math.atan2(vertices.getZ(vertex), vertices.getY(vertex)) / (Math.PI * 2) + .5
+          coordinates[vertex * 2 + 1] = vertices.getX(vertex) / .32 + .5
+        }
+        collar.setAttribute('uv', new Float32BufferAttribute(coordinates, 2))
+        return collar.rotateY(bearingAngle).translate(...node)
+      })
       batch(legGroup, bearings, joint, 'Flanged bearings at hip, knee and ankle')
       const hubAxis = new Vector3(Math.cos(bearingAngle), 0, -Math.sin(bearingAngle)).multiplyScalar(side)
       const caps = [hip,knee,ankle].flatMap((node, i) => {
@@ -189,5 +210,16 @@ export function machine(wide: boolean) {
     return playing
   }
 
-  return { root, poseRupture }
+  const pivotOffset = new Vector3()
+  function poseWalk(phase: number, stride: number, warning: number) {
+    for (const { pivot, group, phase: offset } of legs) {
+      const step = phase + offset
+      group.rotation.y = Math.sin(step) * stride * .20
+      group.position.copy(pivot).sub(pivotOffset.copy(pivot).applyQuaternion(group.quaternion))
+      group.position.y += Math.max(0, Math.cos(step)) * stride * .18
+    }
+    sensor.emissiveIntensity = 2.9 + warning * 6
+  }
+
+  return { root, poseRupture, poseWalk }
 }

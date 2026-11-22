@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Game } from './game/Game'
+import { WorldSession, readSave } from './game/world/session'
 import { SceneEditor } from './editor/SceneEditor'
 import { Home } from './home/Home'
 import { concepts } from './lab/catalog'
@@ -14,8 +16,10 @@ function textField(target: EventTarget | null) {
 export default function App() {
   const [options, setOptions] = useState(initial)
   const [home, setHome] = useState(true)
+  const [session, setSession] = useState<WorldSession | null>(null)
+  const [run, setRun] = useState(0)
   const [motionPaused, setMotionPaused] = useState(false)
-  const [force, setForce] = useState(false)
+  const [force, setForce] = useState(() => new URLSearchParams(location.search).get('renderer') === 'webgl2')
   const [backend, setBackend] = useState<string | null>(null)
   const [triangles, setTriangles] = useState<number | null>(null)
   const [compare, setCompare] = useState(false)
@@ -55,7 +59,7 @@ export default function App() {
       runtime.current = null
       engine?.dispose()
     }
-  }, [force, showHome, showEditor])
+  }, [force, options.dev, showEditor])
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -73,12 +77,23 @@ export default function App() {
 
   if (showHome) {
     return <Home
-      onEnterGame={() => setHome(false)}
+      onEnterGame={() => {
+        setSession(current => current ?? new WorldSession(readSave()))
+        setHome(false)
+      }}
       onEnterLab={() => update({ dev: true })}
       motionPaused={motionPaused}
       onToggleMotion={() => setMotionPaused(value => !value)}
     />
   }
+
+  if (!options.dev && session) return <Game key={run} session={session} force={force} volume={options.volume}
+    onHome={() => setHome(true)} onLab={() => update({ dev: true })} onRestart={() => {
+      const next = new WorldSession(null)
+      next.save()
+      setSession(next)
+      setRun(value => value + 1)
+    }} />
 
   const concept = concepts.find(item => item.id === options.display)
   const dark = options.dev && Boolean(concept)
@@ -168,7 +183,6 @@ export default function App() {
             onChange={event => setForce(event.target.checked)} /></label>
         </aside>
       )}
-      {!options.dev && <div className="space-name">主游戏空间</div>}
     </main>
   )
 }
