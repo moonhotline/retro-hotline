@@ -22,6 +22,7 @@
     "*.ts",
     "*.tsx",
     "game",
+    "editor",
     "lab"
   ],
   "exclude": [
