@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { SceneEditor } from './editor/SceneEditor'
 import { Home } from './home/Home'
 import { concepts } from './lab/catalog'
 import type { Display, LabOptions, createRuntime } from './lab/runtime'
 
-const initial: LabOptions = { dev: false, display: 'blank', volume: true, scan: true, roughness: 0.24 }
+const initial: LabOptions = { dev: false, display: 'editor', volume: true, scan: true, roughness: 0.24 }
 
 function textField(target: EventTarget | null) {
-  return target instanceof HTMLElement && (target.matches('input[type=text], textarea') || target.isContentEditable)
+  return target instanceof HTMLElement &&
+    (target.matches('input:not([type=checkbox]), textarea, select') || target.isContentEditable)
 }
 
 export default function App() {
@@ -22,6 +24,7 @@ export default function App() {
   const runtime = useRef<ReturnType<typeof createRuntime> | null>(null)
   const currentOptions = useRef(options)
   const showHome = home && !options.dev
+  const showEditor = options.dev && options.display === 'editor'
 
   useEffect(() => {
     currentOptions.current = options
@@ -52,7 +55,7 @@ export default function App() {
       runtime.current = null
       engine?.dispose()
     }
-  }, [force, showHome])
+  }, [force, showHome, showEditor])
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -80,9 +83,22 @@ export default function App() {
   const concept = concepts.find(item => item.id === options.display)
   const dark = options.dev && Boolean(concept)
   const comparison = dark && compare && concept
+  const displayPicker = <label className="field">预览
+    <select value={options.display} onChange={event => {
+      setError('')
+      update({ display: event.target.value as Display })
+    }}>
+      <option value="editor">场景编辑器</option>
+      <option value="blank">空白空间</option>
+      <option value="materials">光照与材质</option>
+      <optgroup label="概念模型">
+        {concepts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </optgroup>
+    </select>
+  </label>
 
   return (
-    <main className={`workspace${dark ? ' workspace--dark' : ''}${options.dev ? ' workspace--dev' : ''}`}>
+    <main className={`workspace${dark ? ' workspace--dark' : ''}${showEditor ? ' workspace--editor' : options.dev ? ' workspace--dev' : ''}`}>
       <header className="topbar">
         <button className="wordmark wordmark--home" type="button" aria-label="返回首页" onClick={() => {
           setHome(true)
@@ -93,6 +109,7 @@ export default function App() {
         </button>
       </header>
 
+      {showEditor ? <SceneEditor force={force} onForce={setForce} displayPicker={displayPicker} /> :
       <section className={`stage${comparison ? ' stage--compare' : ''}`} aria-label={options.dev ? 'Dev Lab' : '主游戏空间'}>
         <div ref={host} className="viewport" />
         {comparison && (
@@ -102,26 +119,15 @@ export default function App() {
           </figure>
         )}
         {error && <p className="render-error" role="alert">渲染失败 · {error}</p>}
-      </section>
+      </section>}
 
-      {options.dev && (
+      {options.dev && !showEditor && (
         <aside className="inspector" aria-label="调试面板">
           <div className="inspector-heading">
             <h1>Dev Lab</h1>
             <output className="backend">{backend ?? '初始化中'}</output>
           </div>
-          <label className="field">预览
-            <select value={options.display} onChange={event => {
-              setError('')
-              update({ display: event.target.value as Display })
-            }}>
-              <option value="blank">空白空间</option>
-              <option value="materials">光照与材质</option>
-              <optgroup label="概念模型">
-                {concepts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </optgroup>
-            </select>
-          </label>
+          {displayPicker}
 
           {options.display === 'materials' && (
             <div className="controls">

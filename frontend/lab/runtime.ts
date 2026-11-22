@@ -5,7 +5,7 @@ import { createMaterialStudy } from './materialStudy'
 import { baseFov, createWhiteSpace } from './spaces'
 import { createVolumePass, dockWindow, labWindow } from './volume'
 
-export type Display = 'blank' | 'materials' | ConceptId
+export type Display = 'editor' | 'blank' | 'materials' | ConceptId
 export interface LabOptions {
   dev: boolean
   display: Display
